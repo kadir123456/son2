@@ -21,6 +21,6 @@ class Settings:
     # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
     # Bu stratejide kâr, bir sonraki ters sinyalde alınır.
     # Bu SL, sadece ani ve büyük ters hareketlere karşı bir sigortadır.
-    STOP_LOSS_PERCENT: float = 0.01  # %1 Zarar Durdur
+    STOP_LOSS_PERCENT: float = 0.03  # %1 Zarar Durdur
 
 settings = Settings()
