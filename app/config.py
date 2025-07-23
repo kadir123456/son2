@@ -18,8 +18,9 @@ class Settings:
     ORDER_SIZE_USDT: float = 100.0
     TIMEFRAME: str = "5m"
     
-    # --- Kâr/Zarar Ayarları (SABİT 5 USDT HEDEFİ) ---
-    TAKE_PROFIT_PERCENT: float = 0.005  # %0.6 Kâr Al (~5 USDT net kâr için)
-    STOP_LOSS_PERCENT: float = 0.003   # %0.4 Zarar Durdur (~5 USDT net zarar için)
+    # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
+    # Bu stratejide kâr, bir sonraki ters sinyalde alınır.
+    # Bu SL, sadece ani ve büyük ters hareketlere karşı bir sigortadır.
+    STOP_LOSS_PERCENT: float = 0.01  # %1 Zarar Durdur
 
 settings = Settings()
