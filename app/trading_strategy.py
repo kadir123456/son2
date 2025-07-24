@@ -4,7 +4,7 @@ class TradingStrategy:
     """
     Saf EMA (9, 21) kesişimine dayalı sinyal üretici.
     """
-    def __init__(self, short_ema_period: int = 5, long_ema_period: int = 1):
+    def __init__(self, short_ema_period: int = 9, long_ema_period: int = 21):
         self.short_ema_period = short_ema_period
         self.long_ema_period = long_ema_period
         print(f"Reversal Stratejisi başlatıldı: EMA({self.short_ema_period}, {self.long_ema_period})")
