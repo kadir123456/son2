@@ -15,12 +15,12 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 10
-    ORDER_SIZE_USDT: float = 50.0
-    TIMEFRAME: str = "5m"
+    ORDER_SIZE_USDT: float = 25.0
+    TIMEFRAME: str = "15m"
     
     # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
     # Bu stratejide kâr, bir sonraki ters sinyalde alınır.
     # Bu SL, sadece ani ve büyük ters hareketlere karşı bir sigortadır.
-    STOP_LOSS_PERCENT: float = 0.03  # %1 Zarar Durdur
+    STOP_LOSS_PERCENT: float = 0.04  # %1 Zarar Durdur
 
 settings = Settings()
