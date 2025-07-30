@@ -14,9 +14,9 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = 3
-    ORDER_SIZE_USDT: float = 200.0
-    TIMEFRAME: str = "15m"
+    LEVERAGE: int = 5
+    ORDER_SIZE_USDT: float = 30.0
+    TIMEFRAME: str = "30m"
     
     # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
     # Bu stratejide kâr, bir sonraki ters sinyalde alınır.
