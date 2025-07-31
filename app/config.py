@@ -25,7 +25,7 @@ class Settings:
     # Başlangıçta INITIAL_ORDER_SIZE_USDT değerini alır.
     ORDER_SIZE_USDT: float = INITIAL_ORDER_SIZE_USDT 
     
-    TIMEFRAME: str = "5m"  # Ana işlem zaman dilimi (3m veya 5m olarak güncellendi)
+    TIMEFRAME: str = "3m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
     
     # Botun analiz edeceği coin sembolleri listesi
     # NOT: USDT pariteleri olmalıdır (örn: BTCUSDT, ETHUSDT)
@@ -38,12 +38,12 @@ class Settings:
     
     # --- Kâr/Zarar Ayarları ---
     STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.03 # %3 Kar Al (Yeni Eklendi)
+    TAKE_PROFIT_PERCENT: float = 0.03 # %3 Kar Al
 
     # --- Ek Onay Ayarları ---
     # EMA kesişimine ek bir onay kullanılsın mı?
     # Eğer True ise, CONFIRMATION_TIMEFRAME'deki strateji sinyali de aynı yönde olmalı.
-    USE_ADDITIONAL_CONFIRMATION: bool = True 
-    CONFIRMATION_TIMEFRAME: str = "15m" # Ek onay için zaman dilimi (Örn: daha yüksek zaman dilimi)
+    USE_ADDITIONAL_CONFIRMATION: bool = False # EK ONAY DEVRE DIŞI BIRAKILDI
+    CONFIRMATION_TIMEFRAME: str = "15m" # Ek onay için zaman dilimi (Bu ayar artık USE_ADDITIONAL_CONFIRMATION False olduğu için etkisizdir)
 
 settings = Settings()
