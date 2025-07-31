@@ -15,7 +15,7 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 5
-    ORDER_SIZE_USDT: float = 30.0
+    ORDER_SIZE_USDT: float = 20.0
     TIMEFRAME: str = "30m"
     
     # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
