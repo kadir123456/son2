@@ -18,7 +18,7 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = 5
+    LEVERAGE: int = 15
     INITIAL_ORDER_SIZE_USDT: float = 10.0  # Katlamalı sistem için başlangıç işlem boyutu
     
     # Bu değişken bot_core tarafından dinamik olarak güncellenecek.
@@ -38,7 +38,7 @@ class Settings:
     
     # --- Kâr/Zarar Ayarları ---
     STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.005 # %3 Kar Al
+    TAKE_PROFIT_PERCENT: float = 0.05 # %3 Kar Al
 
     # --- Ek Onay Ayarları ---
     # EMA kesişimine ek bir onay kullanılsın mı?
