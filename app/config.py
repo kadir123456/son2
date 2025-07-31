@@ -18,14 +18,14 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = 15
-    INITIAL_ORDER_SIZE_USDT: float = 10.0  # Katlamalı sistem için başlangıç işlem boyutu
+    LEVERAGE: int = 10
+    INITIAL_ORDER_SIZE_USDT: float = 20.0  # Katlamalı sistem için başlangıç işlem boyutu
     
     # Bu değişken bot_core tarafından dinamik olarak güncellenecek.
     # Başlangıçta INITIAL_ORDER_SIZE_USDT değerini alır.
     ORDER_SIZE_USDT: float = INITIAL_ORDER_SIZE_USDT 
     
-    TIMEFRAME: str = "3m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
+    TIMEFRAME: str = "1m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
     
     # Botun analiz edeceği coin sembolleri listesi
     # NOT: USDT pariteleri olmalıdır (örn: BTCUSDT, ETHUSDT)
