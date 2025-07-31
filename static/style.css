@@ -36,7 +36,7 @@ body {
 
 #app-container {
     align-items: flex-start;
-    max-width: 500px;
+    max-width: 500px; /* Biraz daha genişletildi */
 }
 
 header {
@@ -161,7 +161,7 @@ input:focus {
 .status-value span { font-weight: 500; padding: 3px 8px; border-radius: 4px; display: inline-block; }
 .status-running { background-color: var(--primary-color); color: #fff; }
 .status-stopped { background-color: var(--danger-color); color: #fff; }
-.status-in-position { background-color: var(--info-color); color: #fff; }
+.status-in-position { background-color: var(--info-color); color: #fff; } /* Mavi */
 .error-message { color: var(--danger-color); text-align: center; margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
 .stats-card h2 { color: var(--info-color); }
 .stats-grid { display: grid; grid-template-columns: 1fr auto; gap: 1rem; }

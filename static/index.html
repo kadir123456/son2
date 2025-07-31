@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kısa vadeli</title>
+    <title>Kısa Vadeli Kesişim Botu</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,16 +30,16 @@
 
     <div id="app-container" class="container" style="display: none;">
         <header>
-            <h1>Kısa vadeli kesişim</h1>
+            <h1>Kısa Vadeli Kesişim Botu</h1>
             <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
         <main>
             <div class="card controls-card">
-                <h2>kısa vadeli Yönetimi</h2>
+                <h2>Bot Yönetimi</h2>
                 <div class="form-group">
-                    <label for="symbol-input">İşlem Yapılacak Coin</label>
-                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT">
+                    <label for="symbol-input">İşlem Yapılacak Coin (Opsiyonel)</label>
+                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT (Boş bırakırsanız listeden başlar)">
                 </div>
                 <div class="button-group">
                     <button id="start-button" class="btn btn-start">Botu Başlat</button>
@@ -50,14 +50,18 @@
             <div class="card status-card">
                 <h2>Anlık Durum</h2>
                 <div class="status-grid">
-                    <p class="status-label">Mesaj:</p>
+                    <p class="status-label">Bot Mesajı:</p>
                     <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
                     <p class="status-label">İzlenen Sembol:</p>
                     <p class="status-value"><span id="current-symbol">N/A</span></p>
-                    <p class="status-label">Pozisyonda mı?:</p>
+                    <p class="status-label">Pozisyon Durumu:</p>
                     <p class="status-value"><span id="position-status">Hayır</span></p>
+                    <p class="status-label">Pozisyon Yönü:</p>
+                    <p class="status-value"><span id="position-side">N/A</span></p>
                     <p class="status-label">Son Sinyal:</p>
                     <p class="status-value"><span id="last-signal">N/A</span></p>
+                    <p class="status-label">Güncel Bakiye:</p>
+                    <p class="status-value"><span id="current-balance">0.00 USDT</span></p>
                 </div>
             </div>
             
@@ -66,9 +70,9 @@
                 <div class="stats-grid">
                     <p class="stats-label">Toplam İşlem:</p>
                     <p class="stats-value" id="stats-total-trades">0</p>
-                    <p class="stats-label">Başarılı İşlem:</p>
+                    <p class="stats-label">Kazanan İşlem:</p>
                     <p class="stats-value" id="stats-winning-trades">0 (%0.0)</p>
-                    <p class="stats-label">Başarısız İşlem:</p>
+                    <p class="stats-label">Kaybeden İşlem:</p>
                     <p class="stats-value" id="stats-losing-trades">0 (%0.0)</p>
                     <p class="stats-label">Toplam Kâr:</p>
                     <p class="stats-value" id="stats-total-profit">0.00 USDT</p>

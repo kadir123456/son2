@@ -1,13 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ÇOK ÖNEMLİ: BU BİLGİLERİ KENDİ FIREBASE PROJENİZDEN ALIP DOLDURUN
     const firebaseConfig = {
-        apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
-        authDomain: "aviator-90c8b.firebaseapp.com",
-        databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
-        projectId: "aviator-90c8b",
-        storageBucket: "aviator-90c8b.appspot.com",
-        messagingSenderId: "823763988442",
-        appId: "1:823763988442:web:16a797275675a219c3dae3"
+        apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE", // Kendi Firebase API Key'iniz
+        authDomain: "aviator-90c8b.firebaseapp.com", // Kendi Firebase Auth Domain'iniz
+        databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com", // Kendi Firebase Database URL'iniz
+        projectId: "aviator-90c8b", // Kendi Firebase Project ID'niz
+        storageBucket: "aviator-90c8b.appspot.com", // Kendi Firebase Storage Bucket'ınız
+        messagingSenderId: "823763988442", // Kendi Firebase Messaging Sender ID'niz
+        appId: "1:823763988442:web:16a797275675a219c3dae3" // Kendi Firebase App ID'niz
     };
     // -----------------------------------------------------------------
 
@@ -26,34 +26,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const symbolInput = document.getElementById('symbol-input');
     const startButton = document.getElementById('start-button');
     const stopButton = document.getElementById('stop-button');
+
+    // Yeni ve güncellenmiş durum alanları
     const statusMessageSpan = document.getElementById('status-message');
     const currentSymbolSpan = document.getElementById('current-symbol');
     const positionStatusSpan = document.getElementById('position-status');
+    const positionSideSpan = document.getElementById('position-side'); // Yeni
     const lastSignalSpan = document.getElementById('last-signal');
+    const currentBalanceSpan = document.getElementById('current-balance'); // Yeni
+
+    // İstatistik elementleri
     const statsTotal = document.getElementById('stats-total-trades');
     const statsWinning = document.getElementById('stats-winning-trades');
     const statsLosing = document.getElementById('stats-losing-trades');
     const statsTotalProfit = document.getElementById('stats-total-profit');
     const statsTotalLoss = document.getElementById('stats-total-loss');
     const statsNetPnl = document.getElementById('stats-net-pnl');
+    
     let statusInterval;
 
     // --- KİMLİK DOĞRULAMA ---
     loginButton.addEventListener('click', () => {
         loginError.textContent = "";
         auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
-            .catch(error => { loginError.textContent = "Hatalı e-posta veya şifre."; });
+            .catch(error => { 
+                console.error("Giriş hatası:", error);
+                loginError.textContent = "Hatalı e-posta veya şifre."; 
+            });
     });
 
-    logoutButton.addEventListener('click', () => { auth.signOut(); });
+    logoutButton.addEventListener('click', () => { 
+        auth.signOut(); 
+    });
 
     auth.onAuthStateChanged(user => {
         if (user) {
             loginContainer.style.display = 'none';
             appContainer.style.display = 'flex';
             getStatus();
-            statusInterval = setInterval(getStatus, 8000); // Durum sorgulama aralığı
-            listenForTradeUpdates();
+            statusInterval = setInterval(getStatus, 5000); // Durum sorgulama aralığı 5 saniyeye düşürüldü
+            listenForTradeUpdates(); // Firebase Realtime DB dinlemesi
         } else {
             loginContainer.style.display = 'flex';
             appContainer.style.display = 'none';
@@ -64,50 +76,93 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- API İSTEKLERİ ---
     async function fetchApi(endpoint, options = {}) {
         const user = auth.currentUser;
-        if (!user) { return null; }
-        const idToken = await user.getIdToken(true);
-        const headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
-        if (options.body) headers['Content-Type'] = 'application/json';
+        if (!user) {
+            console.warn("Kullanıcı giriş yapmamış, API isteği yapılamaz.");
+            return null;
+        }
         try {
+            const idToken = await user.getIdToken(true); // Token'ı yenile
+            const headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
+            if (options.body && !headers['Content-Type']) { // Content-Type'ı body varsa ayarla
+                headers['Content-Type'] = 'application/json';
+            }
+            
             const response = await fetch(endpoint, { ...options, headers });
+            
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ detail: response.statusText }));
                 console.error("API Hatası:", errorData.detail);
                 // Kullanıcıya hata göstermek için bir mekanizma eklenebilir
+                statusMessageSpan.textContent = `Hata: ${errorData.detail}`;
+                statusMessageSpan.className = 'status-stopped'; // Hata durumunda kırmızı
                 return null;
             }
             return response.json();
-        } catch (error) { console.error("API isteği hatası:", error); return null; }
+        } catch (error) { 
+            console.error("API isteği hatası:", error); 
+            statusMessageSpan.textContent = `Bağlantı Hatası: ${error.message}`;
+            statusMessageSpan.className = 'status-stopped'; // Hata durumunda kırmızı
+            return null;
+        }
     }
     
     // --- ARAYÜZ GÜNCELLEME ---
     const updateUI = (data) => {
-        if (!data) return;
+        if (!data) {
+            // Veri gelmezse veya hata olursa botu durmuş gibi göster
+            startButton.disabled = false; 
+            stopButton.disabled = true; 
+            symbolInput.disabled = false;
+            statusMessageSpan.className = 'status-stopped';
+            return;
+        }
+
         statusMessageSpan.textContent = data.status_message;
         currentSymbolSpan.textContent = data.symbol || 'N/A';
         lastSignalSpan.textContent = data.last_signal || 'N/A';
+        currentBalanceSpan.textContent = `${data.current_balance ? data.current_balance.toFixed(2) : '0.00'} USDT`; // Güncel bakiye
+        
+        // Botun çalışma durumuna göre butonları ayarla
         if (data.is_running) {
-            startButton.disabled = true; stopButton.disabled = false; symbolInput.disabled = true;
-            symbolInput.value = data.symbol; statusMessageSpan.className = 'status-running';
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            symbolInput.disabled = true; // Bot çalışırken sembol değiştirilemez
+            statusMessageSpan.className = 'status-running'; // Yeşil
         } else {
-            startButton.disabled = false; stopButton.disabled = true; symbolInput.disabled = false;
-            statusMessageSpan.className = 'status-stopped';
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            symbolInput.disabled = false;
+            statusMessageSpan.className = 'status-stopped'; // Kırmızı
         }
+        
+        // Pozisyon durumu ve yönü
         positionStatusSpan.textContent = data.in_position ? 'Evet' : 'Hayır';
-        positionStatusSpan.className = data.in_position ? 'status-in-position' : '';
+        positionStatusSpan.className = data.in_position ? 'status-in-position' : ''; // Pozisyondaysa mavi
+        positionSideSpan.textContent = data.position_side || 'N/A';
     };
 
     const getStatus = async () => updateUI(await fetchApi('/api/status'));
+
     startButton.addEventListener('click', async () => {
         const symbol = symbolInput.value.trim().toUpperCase();
-        if (!symbol) return alert('Lütfen bir coin sembolü girin.');
-        updateUI(await fetchApi('/api/start', { method: 'POST', body: JSON.stringify({ symbol }) }));
+        // Symbol boşsa bile isteği gönder, bot config'den alsın
+        const dataToSend = symbol ? { symbol: symbol } : {};
+
+        updateUI(await fetchApi('/api/start', { 
+            method: 'POST', 
+            body: JSON.stringify(dataToSend) 
+        }));
     });
-    stopButton.addEventListener('click', async () => updateUI(await fetchApi('/api/stop', { method: 'POST' })));
+
+    stopButton.addEventListener('click', async () => {
+        updateUI(await fetchApi('/api/stop', { method: 'POST' }));
+    });
 
     // --- İSTATİSTİK HESAPLAMA ---
     function listenForTradeUpdates() {
         const tradesRef = database.ref('trades');
+        // 'child_added' yerine 'value' kullanmak tüm veriyi alıp tekrar hesaplama için daha uygun.
+        // Daha büyük veri setlerinde 'child_added' ve 'child_changed' daha performanslı olabilir.
         tradesRef.on('value', (snapshot) => {
             const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
             calculateAndDisplayStats(trades);
@@ -115,22 +170,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function calculateAndDisplayStats(trades) {
-        let totalTrades = trades.length;
+        let totalTrades = 0;
         let winningTrades = 0, losingTrades = 0;
         let totalProfit = 0, totalLoss = 0;
 
         trades.forEach(trade => {
-            const pnl = parseFloat(trade.pnl) || 0;
-            if (pnl > 0) {
-                winningTrades++;
-                totalProfit += pnl;
-            } else {
-                losingTrades++;
-                totalLoss += pnl;
+            // Sadece kapanan pozisyonları say (OPEN statüsündeki işlemleri dahil etme)
+            if (trade.status && trade.status !== "OPEN") {
+                totalTrades++;
+                const pnl = parseFloat(trade.pnl) || 0;
+                if (pnl > 0) {
+                    winningTrades++;
+                    totalProfit += pnl;
+                } else if (pnl < 0) {
+                    losingTrades++;
+                    totalLoss += pnl;
+                }
             }
         });
         
-        const netPnl = totalProfit + totalLoss;
+        const netPnl = totalProfit + totalLoss; // totalLoss zaten negatif bir sayı olacak
 
         statsTotal.textContent = totalTrades;
         const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
