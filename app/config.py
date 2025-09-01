@@ -19,13 +19,13 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 10
-    INITIAL_ORDER_SIZE_USDT: float = 20.0  # Katlamalı sistem için başlangıç işlem boyutu
+    INITIAL_ORDER_SIZE_USDT: float = 40.0  # Katlamalı sistem için başlangıç işlem boyutu
     
     # Bu değişken bot_core tarafından dinamik olarak güncellenecek.
     # Başlangıçta INITIAL_ORDER_SIZE_USDT değerini alır.
     ORDER_SIZE_USDT: float = INITIAL_ORDER_SIZE_USDT 
     
-    TIMEFRAME: str = "1m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
+    TIMEFRAME: str = "15m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
     
     # Botun analiz edeceği coin sembolleri listesi
     # NOT: USDT pariteleri olmalıdır (örn: BTCUSDT, ETHUSDT)
