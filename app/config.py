@@ -31,9 +31,7 @@ class Settings:
     # NOT: USDT pariteleri olmalıdır (örn: BTCUSDT, ETHUSDT)
     # Varsayılan olarak 10 adet coin eklendi. İstediğiniz coinleri buraya ekleyebilirsiniz.
     SYMBOLS_TO_TRADE: list[str] = [
-        "SUIUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", 
-        "XRPUSDT", "ADAUSDT", "DOGEUSDT", "SHIBUSDT", 
-        "DOTUSDT", "AVAXUSDT"
+        "SUIUSDT"
     ]
     
     # --- Kâr/Zarar Ayarları ---
