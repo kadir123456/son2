@@ -36,7 +36,7 @@ class Settings:
     
     # --- Kâr/Zarar Ayarları ---
     STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.05 # %3 Kar Al
+    TAKE_PROFIT_PERCENT: float = 0.03 # %3 Kar Al
 
     # --- Ek Onay Ayarları ---
     # EMA kesişimine ek bir onay kullanılsın mı?
