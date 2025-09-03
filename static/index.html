@@ -3,178 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Coin Trading Bot</title>
+    <title>Kısa vadeli</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Login Screen -->
-    <div id="login-screen" class="login-screen">
-        <div class="login-card">
-            <div class="login-title">🚀 Trading Bot</div>
-            <div class="login-subtitle">Multi-Coin otomatik işlem sistemi</div>
-            
-            <!-- Test kullanıcı bilgileri -->
-            <div class="alert alert-info mb-4">
-                <strong>Test Hesabı:</strong><br>
-                E-posta: test@example.com<br>
-                Şifre: test123456
+
+    <div id="login-container" class="container">
+        <div class="card login-card">
+            <h1>Bot Kontrol Paneli</h1>
+            <p class="subtitle">Lütfen giriş yapın</p>
+            <div class="form-group">
+                <label for="email">E-posta</label>
+                <input type="email" id="email" placeholder="ornek@mail.com" autocomplete="email">
             </div>
-            
-            <form id="login-form">
-                <div class="form-group">
-                    <label class="form-label">E-posta Adresi</label>
-                    <input type="email" id="email" class="form-input" placeholder="test@example.com" value="test@example.com" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Şifre</label>
-                    <input type="password" id="password" class="form-input" placeholder="test123456" value="test123456" required>
-                </div>
-                
-                <button type="submit" id="login-btn" class="btn btn-primary btn-full">
-                    <span id="login-text">Giriş Yap</span>
-                    <div id="login-loading" class="loading hidden"></div>
-                </button>
-                
-                <div class="mt-4 text-center">
-                    <div class="btn-group">
-                        <button type="button" id="create-test-user-btn" class="btn btn-outline btn-sm">
-                            Test Kullanıcısı Oluştur
-                        </button>
-                        <button type="button" id="test-connection-btn" class="btn btn-outline btn-sm">
-                            Bağlantıyı Test Et
-                        </button>
-                    </div>
-                </div>
-                
-                <div id="login-error" class="alert alert-danger hidden mt-4"></div>
-            </form>
+            <div class="form-group">
+                <label for="password">Şifre</label>
+                <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+            </div>
+            <button id="login-button" class="btn btn-start">Giriş Yap</button>
+            <p id="login-error" class="error-message"></p>
         </div>
     </div>
 
-    <!-- Main App -->
-    <div id="app-layout" class="app-layout">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div class="logo">
-                    🚀 Multi-Coin Bot
-                </div>
-                <div class="nav-actions">
-                    <span id="user-email" class="text-sm">user@example.com</span>
-                    <button id="logout-btn" class="btn btn-outline btn-sm">Çıkış</button>
-                </div>
-            </div>
+    <div id="app-container" class="container" style="display: none;">
+        <header>
+            <h1>Kısa vadeli kesişim</h1>
+            <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <div class="container">
-                <!-- Bot Control Section -->
-                <div class="grid grid-2">
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">🤖 Bot Kontrolü</div>
-                        </div>
-                        <div class="btn-group">
-                            <button id="start-monitoring-btn" class="btn btn-success">Bot'u Başlat</button>
-                            <button id="stop-all-btn" class="btn btn-danger" disabled>Tümünü Durdur</button>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">➕ Yeni Coin Ekle</div>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Coin Sembolü</label>
-                            <input type="text" id="symbol-input" class="form-input" placeholder="BTCUSDT">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">İşlem Boyutu (USDT)</label>
-                            <input type="number" id="order-size-input" class="form-input" placeholder="50" min="10" step="0.01" value="50">
-                        </div>
-                        <button id="add-coin-btn" class="btn btn-primary btn-full">Coin Ekle</button>
-                    </div>
+        <main>
+            <div class="card controls-card">
+                <h2>kısa vadeli Yönetimi</h2>
+                <div class="form-group">
+                    <label for="symbol-input">İşlem Yapılacak Coin</label>
+                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT">
                 </div>
-
-                <!-- Status Section -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">📊 Sistem Durumu</div>
-                    </div>
-                    <div class="status-grid">
-                        <div class="status-item">
-                            <span class="status-label">Bot Durumu</span>
-                            <span class="status-value" id="bot-status">🔴 Kapalı</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="status-label">Toplam Bakiye</span>
-                            <span class="status-value" id="total-balance">0.00 USDT</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="status-label">Aktif Coin</span>
-                            <span class="status-value" id="active-coins-count">0</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="status-label">Açık Pozisyon</span>
-                            <span class="status-value" id="total-positions">0</span>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <div class="alert alert-info">
-                            <span id="status-message">Bot başlatılmadı.</span>
-                        </div>
-                    </div>
+                <div class="button-group">
+                    <button id="start-button" class="btn btn-start">Botu Başlat</button>
+                    <button id="stop-button" class="btn btn-stop" disabled>Botu Durdur</button>
                 </div>
+            </div>
 
-                <!-- Active Coins Section -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">🪙 İzlenen Coinler</div>
-                    </div>
-                    <div id="coins-container">
-                        <div class="no-data">Henüz coin eklenmedi</div>
-                    </div>
+            <div class="card status-card">
+                <h2>Anlık Durum</h2>
+                <div class="status-grid">
+                    <p class="status-label">Mesaj:</p>
+                    <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
+                    <p class="status-label">İzlenen Sembol:</p>
+                    <p class="status-value"><span id="current-symbol">N/A</span></p>
+                    <p class="status-label">Pozisyonda mı?:</p>
+                    <p class="status-value"><span id="position-status">Hayır</span></p>
+                    <p class="status-label">Son Sinyal:</p>
+                    <p class="status-value"><span id="last-signal">N/A</span></p>
                 </div>
-
-                <!-- Statistics Section -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">📈 Performans İstatistikleri</div>
-                    </div>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-value" id="stats-total-trades">0</div>
-                            <div class="stat-label">Toplam İşlem</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value positive" id="stats-winning-trades">0</div>
-                            <div class="stat-label">Kazanan</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value negative" id="stats-losing-trades">0</div>
-                            <div class="stat-label">Kaybeden</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-value" id="stats-net-pnl">0.00</div>
-                            <div class="stat-label">Net P&L (USDT)</div>
-                        </div>
-                    </div>
+            </div>
+            
+            <div class="card stats-card">
+                <h2>Performans İstatistikleri</h2>
+                <div class="stats-grid">
+                    <p class="stats-label">Toplam İşlem:</p>
+                    <p class="stats-value" id="stats-total-trades">0</p>
+                    <p class="stats-label">Başarılı İşlem:</p>
+                    <p class="stats-value" id="stats-winning-trades">0 (%0.0)</p>
+                    <p class="stats-label">Başarısız İşlem:</p>
+                    <p class="stats-value" id="stats-losing-trades">0 (%0.0)</p>
+                    <p class="stats-label">Toplam Kâr:</p>
+                    <p class="stats-value" id="stats-total-profit">0.00 USDT</p>
+                    <p class="stats-label">Toplam Zarar:</p>
+                    <p class="stats-value" id="stats-total-loss">0.00 USDT</p>
+                    <p class="stats-label">Net Kâr/Zarar:</p>
+                    <p class="stats-value" id="stats-net-pnl">0.00 USDT</p>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Firebase Scripts -->
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-database.js"></script>
-    
-    <!-- Custom Script -->
     <script src="/static/script.js"></script>
 </body>
 </html>
