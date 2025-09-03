@@ -1,171 +1,67 @@
-:root {
-    --bg-color: #0d1117;
-    --card-bg-color: #161b22;
-    --border-color: #30363d;
-    --text-color: #c9d1d9;
-    --text-muted-color: #8b949e;
-    --primary-color: #238636; /* Yeşil */
-    --danger-color: #da3633;  /* Kırmızı */
-    --info-color: #1f6feb;   /* Mavi */
-    --disabled-color: #21262d;
-    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
+# config.py
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+import os
+from dotenv import load_dotenv
 
-body {
-    font-family: var(--font-family);
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 1rem;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
+load_dotenv()
 
-.container {
-    width: 100%;
-    max-width: 420px;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
+class Settings:
+    # --- Temel Ayarlar ---
+    API_KEY: str = os.getenv("BINANCE_API_KEY")
+    API_SECRET: str = os.getenv("BINANCE_API_SECRET")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "LIVE") # "LIVE" veya "TEST"
+    BOT_USERNAME: str = os.getenv("BOT_USERNAME", "admin")
+    BOT_PASSWORD: str = os.getenv("BOT_PASSWORD", "changeme123")
+    
+    # Binance API URL'leri (Ortama göre otomatik ayarlanır)
+    BASE_URL = "https://fapi.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "https://testnet.binancefuture.com"
+    WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
-#app-container {
-    align-items: flex-start;
-    max-width: 500px; /* Biraz daha genişletildi */
-}
+    # --- İşlem Parametreleri ---
+    LEVERAGE: int = 10
+    INITIAL_ORDER_SIZE_USDT: float = 50.0  # Varsayılan işlem boyutu
+    
+    # Ana işlem zaman dilimi - EMA kesişim stratejisi için
+    TIMEFRAME: str = "5m"  # 5 dakikalık mumlar (daha hızlı sinyaller için)
+    
+    # --- Kâr/Zarar Ayarları ---
+    STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.03 # %3 Kar Al
 
-header {
-    text-align: center;
-    width: 100%;
-    position: relative;
-    padding: 0 1rem;
-}
+    # --- Çoklu Coin Ayarları ---
+    # Maksimum aynı anda açık olabilecek pozisyon sayısı
+    MAX_CONCURRENT_POSITIONS: int = 5
+    
+    # Her coin için minimum işlem boyutu (USDT)
+    MIN_ORDER_SIZE_USDT: float = 10.0
+    
+    # Bot'un kullanabileceği maksimum bakiye yüzdesi (güvenlik için)
+    MAX_BALANCE_USAGE_PERCENT: float = 0.8  # %80
 
-header h1 {
-    font-size: 1.75rem;
-}
+    # --- Strateji Ayarları ---
+    # EMA periyotları
+    SHORT_EMA_PERIOD: int = 9
+    LONG_EMA_PERIOD: int = 21
+    
+    # Sinyal filtreleme - aynı yönde art arda kaç sinyal gelmeli
+    SIGNAL_CONFIRMATION_COUNT: int = 1  # 1 = Doğrudan işlem aç
+    
+    # Pozisyon değiştirme gecikme süresi (saniye) - çok sık işlem yapmamak için
+    POSITION_CHANGE_DELAY: float = 30.0
+    
+    # --- Ek Onay Ayarları (İsteğe Bağlı) ---
+    # Bu özellik şu an devre dışı bırakıldı
+    USE_ADDITIONAL_CONFIRMATION: bool = False
+    CONFIRMATION_TIMEFRAME: str = "15m"
 
-.subtitle, header p {
-    color: var(--text-muted-color);
-    font-size: 0.95rem;
-    margin-top: 0.25rem;
-}
+    # --- Risk Yönetimi ---
+    # Günlük maksimum zarar limiti (USDT)
+    DAILY_LOSS_LIMIT: float = 200.0
+    
+    # Günlük maksimum işlem sayısı (spam önleme)
+    DAILY_TRADE_LIMIT: int = 50
+    
+    # Pozisyon boyutu risk çarpanı (volatil coinler için küçük pozisyon)
+    POSITION_SIZE_MULTIPLIER: float = 1.0
 
-.btn-logout {
-    position: absolute;
-    top: 0;
-    right: 0;
-    padding: 0.5rem 0.75rem;
-    flex-grow: 0;
-    font-size: 0.8rem;
-    background-color: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-muted-color);
-}
-.btn-logout:hover {
-    background-color: var(--danger-color);
-    color: #fff;
-    border-color: var(--danger-color);
-}
-
-.card {
-    background-color: var(--card-bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 1.5rem;
-    width: 100%;
-}
-
-.card h1 {
-    font-size: 1.5rem;
-    text-align: center;
-    margin-bottom: 0.5rem;
-}
-
-.card h2 {
-    margin-bottom: 1.25rem;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.75rem;
-    font-size: 1.1rem;
-    font-weight: 500;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-}
-
-.form-group label {
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-muted-color);
-}
-
-input[type="email"], input[type="password"], #symbol-input {
-    width: 100%;
-    padding: 0.7rem;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    font-size: 1rem;
-    font-family: var(--font-family);
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-input:focus {
-    outline: none;
-    border-color: var(--info-color);
-    box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.3);
-}
-
-.button-group {
-    display: flex;
-    gap: 1rem;
-}
-
-.btn {
-    width: 100%;
-    padding: 0.75rem 1rem;
-    border: none;
-    border-radius: 6px;
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.1s ease;
-}
-
-.btn:active { transform: scale(0.98); }
-.btn-start { background-color: var(--primary-color); color: #fff; }
-.btn-start:hover:not(:disabled) { background-color: #2ea043; }
-.btn-stop { background-color: var(--danger-color); color: #fff; }
-.btn-stop:hover:not(:disabled) { background-color: #f85149; }
-.btn:disabled { background-color: var(--disabled-color); color: var(--text-muted-color); cursor: not-allowed; }
-
-.status-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.8rem 1rem;
-    align-items: center;
-}
-
-.status-label { font-weight: 400; color: var(--text-muted-color); }
-.status-value { text-align: right; }
-.status-value span { font-weight: 500; padding: 3px 8px; border-radius: 4px; display: inline-block; }
-.status-running { background-color: var(--primary-color); color: #fff; }
-.status-stopped { background-color: var(--danger-color); color: #fff; }
-.status-in-position { background-color: var(--info-color); color: #fff; } /* Mavi */
-.error-message { color: var(--danger-color); text-align: center; margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
-.stats-card h2 { color: var(--info-color); }
-.stats-grid { display: grid; grid-template-columns: 1fr auto; gap: 1rem; }
-.stats-label { font-weight: 400; color: var(--text-muted-color); }
-.stats-value { font-weight: 700; font-size: 1.1rem; text-align: right; }
-.pnl-positive { color: var(--primary-color); }
-.pnl-negative { color: var(--danger-color); }
+settings = Settings()
