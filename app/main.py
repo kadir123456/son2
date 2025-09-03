@@ -1,6 +1,7 @@
 # app/main.py
 
 import asyncio
+import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
