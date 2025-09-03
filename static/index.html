@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Multi-Coin Trading Bot</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -14,29 +11,11 @@
             box-sizing: border-box;
         }
 
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --info: #3b82f6;
-            --dark: #0f172a;
-            --dark-light: #1e293b;
-            --dark-lighter: #334155;
-            --gray: #64748b;
-            --gray-light: #94a3b8;
-            --white: #ffffff;
-            --border: #e2e8f0;
-            --border-dark: #475569;
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, var(--dark) 0%, var(--dark-light) 100%);
-            color: var(--white);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
             min-height: 100vh;
-            line-height: 1.6;
         }
 
         .container {
@@ -45,11 +24,51 @@
             padding: 1rem;
         }
 
-        /* Header */
+        /* Login Screen Styles */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+
+        .login-card {
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid #475569;
+            border-radius: 16px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .login-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #6366f1, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .login-subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        /* App Layout */
+        .app-layout {
+            display: none;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+
         .header {
             background: rgba(15, 23, 42, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--border-dark);
+            border-bottom: 1px solid #475569;
             padding: 1rem 0;
             position: sticky;
             top: 0;
@@ -66,12 +85,9 @@
         }
 
         .logo {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
             font-size: 1.5rem;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--primary), var(--info));
+            background: linear-gradient(135deg, #6366f1, #3b82f6);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -82,96 +98,9 @@
             align-items: center;
         }
 
-        /* Login Screen */
-        .login-screen {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 1rem;
-        }
-
-        .login-card {
-            background: rgba(30, 41, 59, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-dark);
-            border-radius: 16px;
-            padding: 2rem;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-        }
-
-        .login-title {
-            text-align: center;
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--info));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .login-subtitle {
-            text-align: center;
-            color: var(--gray-light);
-            margin-bottom: 2rem;
-        }
-
-        /* Main App Layout */
-        .app-layout {
-            display: none;
-            min-height: 100vh;
-            flex-direction: column;
-        }
-
         .main-content {
             flex: 1;
             padding: 2rem 0;
-        }
-
-        .grid {
-            display: grid;
-            gap: 1.5rem;
-        }
-
-        .grid-2 {
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-        }
-
-        .grid-3 {
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        }
-
-        /* Cards */
-        .card {
-            background: rgba(30, 41, 59, 0.95);
-            backdrop-filter: blur(10px);
-            border: 1px solid var(--border-dark);
-            border-radius: 16px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .card:hover {
-            border-color: var(--primary);
-            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1);
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1.5rem;
-        }
-
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
 
         /* Form Elements */
@@ -183,24 +112,24 @@
             display: block;
             font-size: 0.875rem;
             font-weight: 500;
-            color: var(--gray-light);
+            color: #94a3b8;
             margin-bottom: 0.5rem;
         }
 
         .form-input {
             width: 100%;
             padding: 0.75rem 1rem;
-            background: var(--dark);
-            border: 1px solid var(--border-dark);
+            background: #0f172a;
+            border: 1px solid #475569;
             border-radius: 8px;
-            color: var(--white);
+            color: white;
             font-size: 1rem;
             transition: all 0.2s ease;
         }
 
         .form-input:focus {
             outline: none;
-            border-color: var(--primary);
+            border-color: #6366f1;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
@@ -226,8 +155,8 @@
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: var(--white);
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
         }
 
         .btn-primary:hover:not(:disabled) {
@@ -236,8 +165,8 @@
         }
 
         .btn-success {
-            background: linear-gradient(135deg, var(--success), #059669);
-            color: var(--white);
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
         }
 
         .btn-success:hover:not(:disabled) {
@@ -246,8 +175,8 @@
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, var(--danger), #dc2626);
-            color: var(--white);
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
         }
 
         .btn-danger:hover:not(:disabled) {
@@ -257,12 +186,12 @@
 
         .btn-outline {
             background: transparent;
-            border: 1px solid var(--border-dark);
-            color: var(--white);
+            border: 1px solid #475569;
+            color: white;
         }
 
         .btn-outline:hover:not(:disabled) {
-            background: var(--dark-light);
+            background: #1e293b;
         }
 
         .btn-sm {
@@ -274,10 +203,49 @@
             width: 100%;
         }
 
-        /* Button Groups */
         .btn-group {
             display: flex;
             gap: 1rem;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(30, 41, 59, 0.95);
+            border: 1px solid #475569;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: #6366f1;
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
         }
 
         /* Status Elements */
@@ -291,19 +259,19 @@
             justify-content: space-between;
             align-items: center;
             padding: 0.75rem;
-            background: var(--dark);
+            background: #0f172a;
             border-radius: 8px;
-            border-left: 4px solid var(--primary);
+            border-left: 4px solid #6366f1;
         }
 
         .status-label {
             font-weight: 500;
-            color: var(--gray-light);
+            color: #94a3b8;
         }
 
         .status-value {
             font-weight: 600;
-            color: var(--white);
+            color: white;
         }
 
         .badge {
@@ -311,50 +279,70 @@
             border-radius: 6px;
             font-size: 0.75rem;
             font-weight: 600;
-            text-transform: uppercase;
         }
 
         .badge-success {
             background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
+            color: #10b981;
             border: 1px solid rgba(16, 185, 129, 0.3);
         }
 
         .badge-danger {
             background: rgba(239, 68, 68, 0.2);
-            color: var(--danger);
+            color: #ef4444;
             border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
         .badge-warning {
             background: rgba(245, 158, 11, 0.2);
-            color: var(--warning);
+            color: #f59e0b;
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
         .badge-info {
             background: rgba(59, 130, 246, 0.2);
-            color: var(--info);
+            color: #3b82f6;
             border: 1px solid rgba(59, 130, 246, 0.3);
         }
 
-        /* Coin Items */
-        .coin-list {
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
+        /* Alerts */
+        .alert {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            border-left: 4px solid;
         }
 
+        .alert-success {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: #10b981;
+            color: #10b981;
+        }
+
+        .alert-danger {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+
+        .alert-info {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: #3b82f6;
+            color: #3b82f6;
+        }
+
+        /* Coin Items */
         .coin-item {
-            background: var(--dark);
-            border: 1px solid var(--border-dark);
+            background: #0f172a;
+            border: 1px solid #475569;
             border-radius: 12px;
             padding: 1.5rem;
+            margin-bottom: 1rem;
             transition: all 0.3s ease;
         }
 
         .coin-item:hover {
-            border-color: var(--primary);
+            border-color: #6366f1;
             transform: translateY(-2px);
         }
 
@@ -368,7 +356,7 @@
         .coin-symbol {
             font-size: 1.25rem;
             font-weight: 700;
-            color: var(--primary);
+            color: #6366f1;
         }
 
         .coin-info {
@@ -383,13 +371,13 @@
 
         .info-label {
             font-size: 0.75rem;
-            color: var(--gray-light);
+            color: #94a3b8;
             margin-bottom: 0.25rem;
         }
 
         .info-value {
             font-weight: 600;
-            color: var(--white);
+            color: white;
         }
 
         /* Stats */
@@ -400,11 +388,11 @@
         }
 
         .stat-card {
-            background: var(--dark);
+            background: #0f172a;
             border-radius: 12px;
             padding: 1.5rem;
             text-align: center;
-            border: 1px solid var(--border-dark);
+            border: 1px solid #475569;
         }
 
         .stat-value {
@@ -415,41 +403,15 @@
 
         .stat-label {
             font-size: 0.875rem;
-            color: var(--gray-light);
+            color: #94a3b8;
         }
 
         .positive {
-            color: var(--success);
+            color: #10b981;
         }
 
         .negative {
-            color: var(--danger);
-        }
-
-        /* Alerts */
-        .alert {
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            border-left: 4px solid;
-        }
-
-        .alert-success {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: var(--success);
-            color: var(--success);
-        }
-
-        .alert-danger {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: var(--danger);
-            color: var(--danger);
-        }
-
-        .alert-info {
-            background: rgba(59, 130, 246, 0.1);
-            border-color: var(--info);
-            color: var(--info);
+            color: #ef4444;
         }
 
         /* Loading */
@@ -459,7 +421,7 @@
             height: 1rem;
             border: 2px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            border-top-color: var(--primary);
+            border-top-color: #6366f1;
             animation: spin 1s ease-in-out infinite;
         }
 
@@ -467,6 +429,30 @@
             to {
                 transform: rotate(360deg);
             }
+        }
+
+        /* Utility Classes */
+        .hidden {
+            display: none !important;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mt-4 {
+            margin-top: 1rem;
+        }
+
+        .mb-4 {
+            margin-bottom: 1rem;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #94a3b8;
+            padding: 3rem 1rem;
+            font-style: italic;
         }
 
         /* Responsive Design */
@@ -491,7 +477,7 @@
                 gap: 1rem;
             }
 
-            .grid-2, .grid-3 {
+            .grid-2 {
                 grid-template-columns: 1fr;
             }
 
@@ -535,42 +521,6 @@
                 padding: 1.5rem;
             }
         }
-
-        /* Utility Classes */
-        .hidden {
-            display: none !important;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .text-sm {
-            font-size: 0.875rem;
-        }
-
-        .text-xs {
-            font-size: 0.75rem;
-        }
-
-        .font-bold {
-            font-weight: 700;
-        }
-
-        .mt-4 {
-            margin-top: 1rem;
-        }
-
-        .mb-4 {
-            margin-bottom: 1rem;
-        }
-
-        .no-data {
-            text-align: center;
-            color: var(--gray-light);
-            padding: 3rem 1rem;
-            font-style: italic;
-        }
     </style>
 </head>
 <body>
@@ -580,21 +530,39 @@
             <div class="login-title">🚀 Trading Bot</div>
             <div class="login-subtitle">Multi-Coin otomatik işlem sistemi</div>
             
+            <!-- Test kullanıcı bilgileri -->
+            <div class="alert alert-info mb-4">
+                <strong>Test Hesabı:</strong><br>
+                E-posta: test@example.com<br>
+                Şifre: test123456
+            </div>
+            
             <form id="login-form">
                 <div class="form-group">
                     <label class="form-label">E-posta Adresi</label>
-                    <input type="email" id="email" class="form-input" placeholder="ornek@mail.com" required>
+                    <input type="email" id="email" class="form-input" placeholder="test@example.com" value="test@example.com" required>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Şifre</label>
-                    <input type="password" id="password" class="form-input" placeholder="••••••••" required>
+                    <input type="password" id="password" class="form-input" placeholder="test123456" value="test123456" required>
                 </div>
                 
                 <button type="submit" id="login-btn" class="btn btn-primary btn-full">
                     <span id="login-text">Giriş Yap</span>
                     <div id="login-loading" class="loading hidden"></div>
                 </button>
+                
+                <div class="mt-4 text-center">
+                    <div class="btn-group">
+                        <button type="button" onclick="createTestUser()" class="btn btn-outline btn-sm">
+                            Test Kullanıcısı Oluştur
+                        </button>
+                        <button type="button" onclick="testFirebaseConnection()" class="btn btn-outline btn-sm">
+                            Bağlantıyı Test Et
+                        </button>
+                    </div>
+                </div>
                 
                 <div id="login-error" class="alert alert-danger hidden mt-4"></div>
             </form>
@@ -610,7 +578,7 @@
                     🚀 Multi-Coin Bot
                 </div>
                 <div class="nav-actions">
-                    <span id="user-email" class="text-sm text-gray-light"></span>
+                    <span id="user-email" class="text-sm">user@example.com</span>
                     <button id="logout-btn" class="btn btn-outline btn-sm">Çıkış</button>
                 </div>
             </div>
@@ -648,7 +616,7 @@
                 </div>
 
                 <!-- Status Section -->
-                <div class="card mt-4">
+                <div class="card">
                     <div class="card-header">
                         <div class="card-title">📊 Sistem Durumu</div>
                     </div>
@@ -678,7 +646,7 @@
                 </div>
 
                 <!-- Active Coins Section -->
-                <div class="card mt-4">
+                <div class="card">
                     <div class="card-header">
                         <div class="card-title">🪙 İzlenen Coinler</div>
                     </div>
@@ -688,7 +656,7 @@
                 </div>
 
                 <!-- Statistics Section -->
-                <div class="card mt-4">
+                <div class="card">
                     <div class="card-header">
                         <div class="card-title">📈 Performans İstatistikleri</div>
                     </div>
@@ -721,6 +689,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-database.js"></script>
 
     <script>
+        console.log('🚀 Bot başlatılıyor...');
+
         // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
@@ -732,9 +702,15 @@
             appId: "1:823763988442:web:16a797275675a219c3dae3"
         };
 
-        firebase.initializeApp(firebaseConfig);
-        const auth = firebase.auth();
-        const database = firebase.database();
+        // Initialize Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            const auth = firebase.auth();
+            const database = firebase.database();
+            console.log('✅ Firebase başlatıldı');
+        } catch (error) {
+            console.error('❌ Firebase hatası:', error);
+        }
 
         // DOM Elements
         const loginScreen = document.getElementById('login-screen');
@@ -749,7 +725,7 @@
         const logoutBtn = document.getElementById('logout-btn');
         const userEmail = document.getElementById('user-email');
 
-        // Bot Control Elements
+        // Bot Elements
         const startMonitoringBtn = document.getElementById('start-monitoring-btn');
         const stopAllBtn = document.getElementById('stop-all-btn');
         const addCoinBtn = document.getElementById('add-coin-btn');
@@ -774,16 +750,18 @@
 
         // Utility Functions
         function showElement(element) {
-            element.classList.remove('hidden');
+            if (element) element.classList.remove('hidden');
         }
 
         function hideElement(element) {
-            element.classList.add('hidden');
+            if (element) element.classList.add('hidden');
         }
 
         function showError(message) {
-            loginError.textContent = message;
-            showElement(loginError);
+            if (loginError) {
+                loginError.textContent = message;
+                showElement(loginError);
+            }
         }
 
         function hideError() {
@@ -792,321 +770,124 @@
 
         function setLoading(loading) {
             if (loading) {
-                loginBtn.disabled = true;
+                if (loginBtn) loginBtn.disabled = true;
                 hideElement(loginText);
                 showElement(loginLoading);
             } else {
-                loginBtn.disabled = false;
+                if (loginBtn) loginBtn.disabled = false;
                 showElement(loginText);
                 hideElement(loginLoading);
             }
         }
 
-        // Authentication
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = emailInput.value;
-            const password = passwordInput.value;
-            
-            if (!email || !password) return;
-
-            setLoading(true);
-            hideError();
-
+        // Test Functions
+        window.createTestUser = async () => {
             try {
-                await auth.signInWithEmailAndPassword(email, password);
+                const email = "test@example.com";
+                const password = "test123456";
+                
+                console.log('Test kullanıcısı oluşturuluyor...');
+                const userCredential = await auth.createUserWithEmailAndPassword(email, password);
+                console.log('✅ Test kullanıcı oluşturuldu:', userCredential.user.email);
+                alert(`✅ Test kullanıcısı oluşturuldu!\nE-posta: ${email}\nŞifre: ${password}`);
             } catch (error) {
-                console.error('Login error:', error);
-                showError('E-posta veya şifre hatalı!');
-                setLoading(false);
+                console.error('❌ Test kullanıcı hatası:', error);
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    alert(`ℹ️ Test kullanıcısı zaten mevcut!\nE-posta: test@example.com\nŞifre: test123456`);
+                } else {
+                    alert('❌ Test kullanıcısı oluşturulamadı: ' + error.message);
+                }
             }
-        });
+        };
 
-        logoutBtn.addEventListener('click', () => {
-            auth.signOut();
-        });
+        window.testFirebaseConnection = async () => {
+            try {
+                console.log('Firebase bağlantısı test ediliyor...');
+                
+                // Auth test
+                const currentUser = auth.currentUser;
+                console.log('Mevcut kullanıcı:', currentUser?.email || 'Yok');
+                
+                // Database test
+                const testRef = database.ref('test');
+                await testRef.set({ timestamp: Date.now(), message: 'Test bağlantısı' });
+                console.log('✅ Database yazma testi başarılı');
+                
+                const snapshot = await testRef.once('value');
+                console.log('✅ Database okuma testi başarılı:', snapshot.val());
+                
+                alert('✅ Firebase bağlantısı başarılı!');
+                
+            } catch (error) {
+                console.error('❌ Firebase bağlantı testi başarısız:', error);
+                alert('❌ Firebase bağlantı testi başarısız: ' + error.message);
+            }
+        };
 
+        // Authentication
+        if (loginForm) {
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const email = emailInput.value.trim();
+                const password = passwordInput.value.trim();
+                
+                console.log('Giriş denemesi:', { email, password: password ? '***' : 'boş' });
+                
+                if (!email || !password) {
+                    showError('E-posta ve şifre alanları boş olamaz!');
+                    return;
+                }
+
+                setLoading(true);
+                hideError();
+
+                try {
+                    console.log('Firebase giriş deneniyor...');
+                    const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                    console.log('✅ Giriş başarılı:', userCredential.user.email);
+                } catch (error) {
+                    console.error('❌ Giriş hatası:', error);
+                    
+                    let errorMessage = 'Giriş yapılırken bir hata oluştu!';
+                    
+                    switch (error.code) {
+                        case 'auth/user-not-found':
+                            errorMessage = 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı!';
+                            break;
+                        case 'auth/wrong-password':
+                            errorMessage = 'Şifre yanlış!';
+                            break;
+                        case 'auth/invalid-email':
+                            errorMessage = 'Geçersiz e-posta formatı!';
+                            break;
+                        case 'auth/invalid-credential':
+                            errorMessage = 'E-posta veya şifre hatalı!';
+                            break;
+                        default:
+                            errorMessage = `Hata: ${error.message}`;
+                    }
+                    
+                    showError(errorMessage);
+                    setLoading(false);
+                }
+            });
+        }
+
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                auth.signOut();
+            });
+        }
+
+        // Auth State Changes
         auth.onAuthStateChanged(user => {
+            console.log('Auth durumu değişti:', user ? user.email : 'Kullanıcı yok');
+            
             if (user) {
                 hideElement(loginScreen);
                 showElement(appLayout);
-                userEmail.textContent = user.email;
+                if (userEmail) userEmail.textContent = user.email;
                 
                 getStatus();
-                statusInterval = setInterval(getStatus, 3000);
-                listenForTradeUpdates();
-            } else {
-                showElement(loginScreen);
-                hideElement(appLayout);
-                setLoading(false);
-                hideError();
-                
-                if (statusInterval) {
-                    clearInterval(statusInterval);
-                }
-            }
-        });
-
-        // API Functions
-        async function fetchApi(endpoint, options = {}) {
-            const user = auth.currentUser;
-            if (!user) return null;
-
-            try {
-                const idToken = await user.getIdToken(true);
-                const headers = {
-                    ...options.headers,
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                };
-
-                const response = await fetch(endpoint, {
-                    ...options,
-                    headers
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({
-                        detail: response.statusText
-                    }));
-                    throw new Error(errorData.detail);
-                }
-
-                return response.json();
-            } catch (error) {
-                console.error('API Error:', error);
-                updateStatusMessage(`❌ ${error.message}`, 'danger');
-                return null;
-            }
-        }
-
-        // Bot Control Functions
-        startMonitoringBtn.addEventListener('click', async () => {
-            const result = await fetchApi('/api/start-monitoring', { method: 'POST' });
-            if (result) {
-                updateStatusMessage('✅ Bot monitoring başlatıldı!', 'success');
-                updateUI(result.status);
-            }
-        });
-
-        stopAllBtn.addEventListener('click', async () => {
-            if (!confirm('Tüm işlemleri durdurmak istediğinizden emin misiniz?')) return;
-            
-            const result = await fetchApi('/api/stop-all', { method: 'POST' });
-            if (result) {
-                updateStatusMessage('✅ Tüm işlemler durduruldu!', 'success');
-                updateUI(result.status);
-            }
-        });
-
-        addCoinBtn.addEventListener('click', async () => {
-            const symbol = symbolInput.value.trim().toUpperCase();
-            const orderSize = parseFloat(orderSizeInput.value);
-
-            if (!symbol) {
-                updateStatusMessage('❌ Coin sembolü boş olamaz!', 'danger');
-                return;
-            }
-
-            if (!orderSize || orderSize < 10) {
-                updateStatusMessage('❌ İşlem boyutu minimum 10 USDT olmalı!', 'danger');
-                return;
-            }
-
-            const result = await fetchApi('/api/add-coin', {
-                method: 'POST',
-                body: JSON.stringify({
-                    symbol: symbol,
-                    order_size_usdt: orderSize
-                })
-            });
-
-            if (result) {
-                updateStatusMessage(`✅ ${symbol} başarıyla eklendi!`, 'success');
-                symbolInput.value = '';
-                orderSizeInput.value = '50';
-                updateUI(result.status);
-            }
-        });
-
-        // Remove Coin Function
-        async function removeCoin(symbol) {
-            if (!confirm(`${symbol} coin'ini kaldırmak istediğinizden emin misiniz?\nAçık pozisyon varsa kapatılacaktır!`)) {
-                return;
-            }
-
-            const result = await fetchApi('/api/remove-coin', {
-                method: 'POST',
-                body: JSON.stringify({ symbol: symbol })
-            });
-
-            if (result) {
-                updateStatusMessage(`✅ ${symbol} başarıyla kaldırıldı!`, 'success');
-                updateUI(result.status);
-            }
-        }
-
-        // Make removeCoin globally available
-        window.removeCoin = removeCoin;
-
-        // UI Update Functions
-        function updateUI(data) {
-            if (!data) return;
-
-            // Bot Status
-            botStatus.innerHTML = data.is_running ? 
-                '<span class="badge badge-success">🟢 Çalışıyor</span>' : 
-                '<span class="badge badge-danger">🔴 Durdurulmuş</span>';
-
-            // Balance and Counts
-            totalBalance.textContent = `${(data.total_balance || 0).toFixed(2)} USDT`;
-            activeCoinsCount.textContent = Object.keys(data.active_coins || {}).length;
-            totalPositions.textContent = data.total_positions || 0;
-
-            // Button States
-            startMonitoringBtn.disabled = data.is_running;
-            stopAllBtn.disabled = !data.is_running;
-            addCoinBtn.disabled = !data.is_running;
-
-            // Update Coins Display
-            updateCoinsDisplay(data.coin_details || {});
-        }
-
-        function updateCoinsDisplay(coinDetails) {
-            if (Object.keys(coinDetails).length === 0) {
-                coinsContainer.innerHTML = '<div class="no-data">Henüz coin eklenmedi</div>';
-                return;
-            }
-
-            const coinsHTML = Object.entries(coinDetails).map(([symbol, details]) => {
-                const positionBadge = details.in_position ? 
-                    '<span class="badge badge-success">📍 Pozisyonda</span>' : 
-                    '<span class="badge badge-info">⏳ Beklemede</span>';
-
-                const pnlClass = (details.pnl || 0) >= 0 ? 'positive' : 'negative';
-                const signalBadge = getSignalBadge(details.last_signal);
-
-                return `
-                    <div class="coin-item">
-                        <div class="coin-header">
-                            <div class="coin-symbol">${symbol}</div>
-                            <button onclick="removeCoin('${symbol}')" class="btn btn-danger btn-sm">
-                                🗑️ Kaldır
-                            </button>
-                        </div>
-                        <div class="coin-info">
-                            <div class="info-item">
-                                <div class="info-label">Durum</div>
-                                <div class="info-value">${positionBadge}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Pozisyon Yönü</div>
-                                <div class="info-value">${details.position_side || 'Yok'}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">Son Sinyal</div>
-                                <div class="info-value">${signalBadge}</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">İşlem Boyutu</div>
-                                <div class="info-value">${(details.order_size_usdt || 0).toFixed(2)} USDT</div>
-                            </div>
-                            <div class="info-item">
-                                <div class="info-label">P&L</div>
-                                <div class="info-value ${pnlClass}">${(details.pnl || 0).toFixed(2)} USDT</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            coinsContainer.innerHTML = coinsHTML;
-        }
-
-        function getSignalBadge(signal) {
-            switch (signal) {
-                case 'LONG':
-                    return '<span class="badge badge-success">📈 LONG</span>';
-                case 'SHORT':
-                    return '<span class="badge badge-danger">📉 SHORT</span>';
-                case 'HOLD':
-                    return '<span class="badge badge-warning">⏸️ BEKLE</span>';
-                default:
-                    return '<span class="badge badge-info">📊 N/A</span>';
-            }
-        }
-
-        function updateStatusMessage(message, type = 'info') {
-            statusMessage.textContent = message;
-            statusMessage.parentElement.className = `alert alert-${type}`;
-        }
-
-        // Status Polling
-        async function getStatus() {
-            const data = await fetchApi('/api/status');
-            if (data) updateUI(data);
-        }
-
-        // Firebase Statistics
-        function listenForTradeUpdates() {
-            const tradesRef = database.ref('trades');
-            tradesRef.on('value', (snapshot) => {
-                const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
-                calculateAndDisplayStats(trades);
-            });
-        }
-
-        function calculateAndDisplayStats(trades) {
-            let totalTrades = 0;
-            let winningTrades = 0;
-            let losingTrades = 0;
-            let totalProfit = 0;
-            let totalLoss = 0;
-
-            trades.forEach(trade => {
-                if (trade.status && trade.status !== "OPEN") {
-                    totalTrades++;
-                    const pnl = parseFloat(trade.pnl) || 0;
-                    
-                    if (pnl > 0) {
-                        winningTrades++;
-                        totalProfit += pnl;
-                    } else if (pnl < 0) {
-                        losingTrades++;
-                        totalLoss += Math.abs(pnl);
-                    }
-                }
-            });
-
-            const netPnl = totalProfit - totalLoss;
-            const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
-
-            // Update Stats
-            statsTotal.textContent = totalTrades;
-            statsWinning.textContent = `${winningTrades} (${winRate}%)`;
-            statsLosing.textContent = `${losingTrades} (${(100 - winRate).toFixed(1)}%)`;
-            
-            // Format Net P&L
-            statsNetPnl.textContent = netPnl.toFixed(2);
-            statsNetPnl.className = `stat-value ${netPnl >= 0 ? 'positive' : 'negative'}`;
-        }
-
-        // Keyboard Shortcuts
-        document.addEventListener('keydown', (e) => {
-            // Enter to add coin when symbol input is focused
-            if (e.key === 'Enter' && document.activeElement === symbolInput) {
-                e.preventDefault();
-                addCoinBtn.click();
-            }
-        });
-
-        // Auto-uppercase symbol input
-        symbolInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.toUpperCase();
-        });
-
-        // Initialize
-        console.log('🚀 Multi-Coin Trading Bot initialized');
-    </script>
-</body>
-</html>
