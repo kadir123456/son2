@@ -9,24 +9,31 @@ from .trading_strategy import trading_strategy
 from .firebase_manager import firebase_manager
 from datetime import datetime, timezone
 import math
+from typing import Dict, Optional
+
+class CoinTracker:
+    """Her coin için bağımsız pozisyon ve strateji takibi"""
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+        self.klines: list = []
+        self.position_side: Optional[str] = None  # "LONG", "SHORT" veya None
+        self.in_position: bool = False
+        self.last_signal: str = "N/A"
+        self.quantity_precision: int = 0
+        self.price_precision: int = 0
+        self.websocket_task: Optional[asyncio.Task] = None
 
 class BotCore:
     def __init__(self):
         self.status = {
             "is_running": False,
-            "symbol": None,
-            "position_side": None, # "LONG", "SHORT" veya None
-            "status_message": "Bot başlatılmadı.",
-            "current_balance": settings.INITIAL_ORDER_SIZE_USDT, # Başlangıç bakiyesi
-            "current_symbol_index": 0, # İşlem yapılacak coin listesi için index
-            "last_signal": "N/A", # Son gelen sinyal
-            "in_position": False # Pozisyonda olup olmadığını gösterir
+            "total_balance": settings.INITIAL_ORDER_SIZE_USDT,
+            "active_coins": {},  # Her coin için detaylı durum
+            "total_positions": 0,
+            "status_message": "Bot başlatılmadı."
         }
-        self.klines: list = []
+        self.coin_trackers: Dict[str, CoinTracker] = {}
         self._stop_requested: bool = False
-        self.quantity_precision: int = 0
-        self.price_precision: int = 0
-        self.current_websocket_task: asyncio.Task | None = None # Aktif WebSocket görevini tutar
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
         """Binance sembol bilgilerinden miktar/fiyat hassasiyetini alır."""
@@ -38,285 +45,343 @@ class BotCore:
                 return 0
         return 0
 
-    async def start(self, initial_symbol: str = None):
-        """Botu başlatır ve işlem döngüsünü tetikler."""
-        if self.status["is_running"]:
-            print("Bot zaten çalışıyor.")
-            self.status["status_message"] = "Bot zaten çalışıyor."
-            return
-
-        self._stop_requested = False
-        self.status["is_running"] = True
-        self.status["status_message"] = "Bot başlatılıyor..."
-        print(self.status["status_message"])
-
-        await binance_client.initialize()
+    async def add_coin(self, symbol: str, order_size_usdt: float) -> bool:
+        """Yeni bir coin ekler ve işlem başlatır"""
+        if not self.status["is_running"]:
+            await self._initialize_bot()
         
-        # Eğer manuel sembol verilmediyse, listeden ilkini al
-        if initial_symbol:
-            # Eğer verilen sembol listede yoksa ekleyelim ve sadece onu izleyelim
-            if initial_symbol.upper() not in settings.SYMBOLS_TO_TRADE:
-                settings.SYMBOLS_TO_TRADE = [initial_symbol.upper()]
-                self.status["current_symbol_index"] = 0
-                print(f"UYARI: {initial_symbol} SYMBOLS_TO_TRADE listesinde yoktu, sadece bu sembol izlenecek.")
-            else:
-                self.status["current_symbol_index"] = settings.SYMBOLS_TO_TRADE.index(initial_symbol.upper())
+        symbol = symbol.upper()
+        
+        if symbol in self.coin_trackers:
+            print(f"⚠️ {symbol} zaten izleniyor.")
+            return False
 
-            self.status["symbol"] = initial_symbol.upper()
-        else:
-            if not settings.SYMBOLS_TO_TRADE:
-                self.status["status_message"] = "İşlem yapılacak coin listesi boş. Bot durduruluyor."
-                await self.stop()
-                return
-            self.status["symbol"] = settings.SYMBOLS_TO_TRADE[self.status["current_symbol_index"]]
-
-        await self._start_trading_for_symbol(self.status["symbol"])
-
-    async def _start_trading_for_symbol(self, symbol: str):
-        """Belirli bir sembol için işlem döngüsünü başlatır."""
-        if not self.status["is_running"] or self._stop_requested:
-            print(f"Bot durdurulduğu için {symbol} işlemi başlatılmıyor.")
-            return
-
-        self.status.update({"symbol": symbol, "position_side": None, "in_position": False, "status_message": f"{symbol} için başlatılıyor..."})
-        print(f"--> {symbol} üzerinde işlem başlıyor.")
-
+        # Sembol bilgilerini kontrol et
         symbol_info = await binance_client.get_symbol_info(symbol)
         if not symbol_info:
-            self.status["status_message"] = f"{symbol} için borsa bilgileri alınamadı. Sonraki coine geçiliyor..."
-            print(self.status["status_message"])
-            await self._try_next_symbol()
-            return
+            print(f"❌ {symbol} için borsa bilgileri alınamadı.")
+            return False
+
+        # Yeni coin tracker oluştur
+        tracker = CoinTracker(symbol)
+        tracker.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
+        tracker.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
         
-        # Hassasiyetleri al
-        self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
-        self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
-        print(f"{symbol} için Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
+        print(f"📊 {symbol} - Miktar Hassasiyeti: {tracker.quantity_precision}, Fiyat Hassasiyeti: {tracker.price_precision}")
         
         # Kaldıracı ayarla
         if not await binance_client.set_leverage(symbol, settings.LEVERAGE):
-            self.status["status_message"] = "Kaldıraç ayarlanamadı. Sonraki coine geçiliyor..."
-            print(self.status["status_message"])
-            await self._try_next_symbol()
-            return
+            print(f"❌ {symbol} için kaldıraç ayarlanamadı.")
+            return False
 
         # Geçmiş mum verilerini çek
-        self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
-        if not self.klines:
-            self.status["status_message"] = "Geçmiş veri alınamadı. Sonraki coine geçiliyor..."
-            print(self.status["status_message"])
-            await self._try_next_symbol()
+        tracker.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+        if not tracker.klines:
+            print(f"❌ {symbol} için geçmiş veri alınamadı.")
+            return False
+
+        # Coin tracker'ı kaydet
+        self.coin_trackers[symbol] = tracker
+        
+        # Durum güncelle
+        self.status["active_coins"][symbol] = {
+            "order_size_usdt": order_size_usdt,
+            "position_side": None,
+            "in_position": False,
+            "last_signal": "N/A",
+            "pnl": 0.0
+        }
+
+        # WebSocket başlat
+        tracker.websocket_task = asyncio.create_task(self._run_websocket_for_coin(symbol))
+        
+        print(f"✅ {symbol} başarıyla eklendi ve izleniyor. İşlem boyutu: {order_size_usdt} USDT")
+        self._update_status_message()
+        return True
+
+    async def remove_coin(self, symbol: str) -> bool:
+        """Coin'i izlemekten çıkarır ve pozisyon varsa kapatır"""
+        symbol = symbol.upper()
+        
+        if symbol not in self.coin_trackers:
+            print(f"⚠️ {symbol} zaten izlenmiyor.")
+            return False
+
+        tracker = self.coin_trackers[symbol]
+        
+        # Önce açık pozisyonu kapat
+        if tracker.in_position:
+            await self._close_position_for_coin(symbol)
+            await asyncio.sleep(1)  # Pozisyon kapanması için bekleme
+
+        # WebSocket görevini iptal et
+        if tracker.websocket_task:
+            tracker.websocket_task.cancel()
+            try:
+                await tracker.websocket_task
+            except asyncio.CancelledError:
+                pass
+
+        # Tracker'ı kaldır
+        del self.coin_trackers[symbol]
+        if symbol in self.status["active_coins"]:
+            del self.status["active_coins"][symbol]
+
+        print(f"🗑️ {symbol} izlemeden çıkarıldı.")
+        self._update_status_message()
+        return True
+
+    async def _initialize_bot(self):
+        """Bot'un temel bileşenlerini başlatır"""
+        if not self.status["is_running"]:
+            await binance_client.initialize()
+            self.status["is_running"] = True
+            print("🤖 Bot core başlatıldı.")
+
+    async def start_monitoring(self):
+        """Genel bot durumunu başlatır"""
+        if self.status["is_running"]:
+            print("⚠️ Bot zaten çalışıyor.")
             return
 
-        self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor..."
-        print(self.status["status_message"])
+        self._stop_requested = False
+        await self._initialize_bot()
+        self._update_status_message()
 
-        # Mevcut WebSocket görevini iptal et ve yenisini başlat
-        if self.current_websocket_task:
-            self.current_websocket_task.cancel()
-            try:
-                await self.current_websocket_task # Önceki görevin sonlanmasını bekle
-            except asyncio.CancelledError:
-                pass # İptal edildiği için hata vermemeli
+    async def stop_all(self):
+        """Tüm coin'leri durdurur ve botu kapatır"""
+        self._stop_requested = True
+        
+        # Tüm coin'ler için pozisyonları kapat ve websocket'leri iptal et
+        for symbol in list(self.coin_trackers.keys()):
+            await self.remove_coin(symbol)
 
-        # Yeni WebSocket görevini oluştur ve başlat
-        self.current_websocket_task = asyncio.create_task(self._run_websocket(symbol))
+        # Bot durumunu sıfırla
+        self.status.update({
+            "is_running": False,
+            "active_coins": {},
+            "total_positions": 0,
+            "status_message": "Bot durduruldu."
+        })
+        
+        print("🛑 Bot durduruldu ve tüm pozisyonlar kapatıldı.")
+        await binance_client.close()
 
-
-    async def _run_websocket(self, symbol: str):
-        """Belirli bir sembol için WebSocket bağlantısını yönetir."""
+    async def _run_websocket_for_coin(self, symbol: str):
+        """Belirli bir coin için WebSocket bağlantısını yönetir"""
         ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
-        while not self._stop_requested and self.status["is_running"] and self.status["symbol"] == symbol:
+        tracker = self.coin_trackers.get(symbol)
+        
+        if not tracker:
+            return
+
+        while not self._stop_requested and symbol in self.coin_trackers:
             try:
                 async with websockets.connect(ws_url, ping_interval=30, ping_timeout=15) as ws:
-                    print(f"WebSocket bağlantısı kuruldu: {ws_url}")
-                    while not self._stop_requested and self.status["is_running"] and self.status["symbol"] == symbol:
+                    print(f"🔗 {symbol} WebSocket bağlantısı kuruldu")
+                    while not self._stop_requested and symbol in self.coin_trackers:
                         try:
                             message = await asyncio.wait_for(ws.recv(), timeout=60.0)
-                            await self._handle_websocket_message(message)
+                            await self._handle_websocket_message_for_coin(symbol, message)
                         except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
-                            print(f"{symbol} piyasa veri akışı bağlantı sorunu. Yeniden bağlanılıyor...")
-                            break # Inner while döngüsünden çıkıp dıştaki while döngüsüne düşer
+                            print(f"⚠️ {symbol} WebSocket bağlantı sorunu. Yeniden bağlanılıyor...")
+                            break
                         except asyncio.CancelledError:
-                            print(f"WebSocket görevi {symbol} için iptal edildi.")
-                            return # Görev iptal edilirse tamamen çık
+                            print(f"🛑 {symbol} WebSocket görevi iptal edildi.")
+                            return
             except Exception as e:
-                print(f"WebSocket bağlantı hatası ({symbol}): {e}. Yeniden deneniyor...")
-                self.status["status_message"] = f"WebSocket bağlantı hatası ({symbol})."
-                await asyncio.sleep(5) # Hata durumunda kısa bekleme ve yeniden deneme
-        
-        # WebSocket döngüsü bittiğinde (bot durdurulduğunda veya sembol değiştiğinde)
-        if not self._stop_requested and self.status["is_running"]:
-            print(f"WebSocket {symbol} için kapandı veya sembol değişti. Yeni bir sembole geçiliyor...")
-            await self._try_next_symbol() # Sembol değiştiyse veya bağlantı koptuysa sonraki coine geç
+                if symbol in self.coin_trackers:  # Sadece hala izlenen coin'ler için hata mesajı
+                    print(f"❌ {symbol} WebSocket hatası: {e}")
+                    await asyncio.sleep(5)
 
-    async def _try_next_symbol(self):
-        """Sıradaki işlem yapılacak coine geçer."""
-        if not self.status["is_running"] or self._stop_requested:
-            return # Bot durdurulmuşsa veya durdurma isteği varsa çık
-
-        if not settings.SYMBOLS_TO_TRADE:
-            self.status["status_message"] = "İşlem yapılacak coin listesi boş. Bot durduruluyor."
-            await self.stop()
+    async def _handle_websocket_message_for_coin(self, symbol: str, message: str):
+        """Belirli bir coin için WebSocket mesajını işler"""
+        if symbol not in self.coin_trackers:
             return
 
-        current_index = self.status["current_symbol_index"]
-        next_index = (current_index + 1) % len(settings.SYMBOLS_TO_TRADE)
-        self.status["current_symbol_index"] = next_index
-        next_symbol = settings.SYMBOLS_TO_TRADE[next_index]
-
-        if next_symbol == self.status["symbol"] and len(settings.SYMBOLS_TO_TRADE) > 1:
-            print(f"Tüm coinler denendi, başa dönülüyor ({next_symbol}).")
-        elif len(settings.SYMBOLS_TO_TRADE) == 1:
-            print(f"Tek coin mevcut ({next_symbol}), tekrar deneniyor.")
-
-        print(f"Sonraki sembole geçiliyor: {next_symbol}")
-        await asyncio.sleep(3) # Coin geçişleri arasında biraz bekleme
-        await self._start_trading_for_symbol(next_symbol) # Yeni sembol ile başlat
-
-    async def stop(self):
-        """Botu durdurur ve tüm işlemleri temizler."""
-        self._stop_requested = True
-        if self.current_websocket_task:
-            self.current_websocket_task.cancel() # Aktif WebSocket görevini iptal et
-            try:
-                await self.current_websocket_task # Görevin tamamlanmasını bekle
-            except asyncio.CancelledError:
-                pass # Görev iptal edildiğinde beklenen hata
-
-        if self.status["is_running"]:
-            self.status.update({
-                "is_running": False, 
-                "symbol": None, 
-                "position_side": None, 
-                "in_position": False,
-                "status_message": "Bot durduruldu.",
-                "last_signal": "N/A"
-            })
-            print(self.status["status_message"])
-            await binance_client.close() # Binance bağlantısını kapat
-
-    async def _handle_websocket_message(self, message: str):
-        """WebSocket'ten gelen mum verilerini işler ve stratejiyi uygular."""
+        tracker = self.coin_trackers[symbol]
         data = json.loads(message)
         
-        # Eğer mum kapanmadıysa veya bizim sembolümüze ait değilse işlem yapma
-        if not data.get('k', {}).get('x', False) or data['k']['s'].upper() != self.status["symbol"]:
+        # Mum kapanma kontrolü
+        if not data.get('k', {}).get('x', False) or data['k']['s'].upper() != symbol:
             return
-            
-        current_symbol = self.status["symbol"]
+
+        print(f"📊 {symbol} yeni mum kapandı - Kapanış: {data['k']['c']}")
         
-        print(f"Yeni mum kapandı: {current_symbol} ({settings.TIMEFRAME}) - Kapanış: {data['k']['c']}")
+        # Klines güncelle
+        tracker.klines.pop(0)
+        tracker.klines.append([data['k'][key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']] + ['0'])
         
-        # Klines listesini güncelle (en eski mumu çıkar, yeni mumu ekle)
-        # Deep copy yerine, sadece gerekli kısımları alarak performans artırımı
-        self.klines.pop(0)
-        self.klines.append([data['k'][key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']] + ['0'])
+        # Pozisyon durumunu kontrol et
+        open_positions = await binance_client.get_open_positions(symbol)
+        was_in_position = tracker.in_position
         
-        # Mevcut açık pozisyonları kontrol et
-        open_positions = await binance_client.get_open_positions(current_symbol)
+        tracker.in_position = bool(open_positions)
         
-        # Pozisyon durumu güncellemesi
-        self.status["in_position"] = bool(open_positions)
         if open_positions:
             position_amt = float(open_positions[0]['positionAmt'])
-            self.status["position_side"] = "LONG" if position_amt > 0 else "SHORT"
+            tracker.position_side = "LONG" if position_amt > 0 else "SHORT"
         else:
-            # Eğer open_positions boşsa ve daha önce bir pozisyon vardıysa (position_side None değilse),
-            # bu pozisyonun SL/TP veya manuel olarak kapandığı anlamına gelir.
-            if self.status["position_side"] is not None:
-                print(f"--> Pozisyon SL/TP veya başka bir nedenle kapandı. PNL hesaplanıyor...")
-                pnl = await binance_client.get_last_trade_pnl(current_symbol)
-                log_status = "CLOSED_BY_TP" if pnl > 0 else ("CLOSED_BY_SL" if pnl < 0 else "CLOSED_MANUALLY")
-                
-                firebase_manager.log_trade({
-                    "symbol": current_symbol, 
-                    "pnl": pnl, 
-                    "status": log_status, 
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
-                
-                # Katlamalı sistem: Kârı (veya zararı) ana bakiyeye ekle
-                self.status["current_balance"] += pnl
-                # Minimum işlem boyutunun altına düşmemek için bir kontrol eklenebilir.
-                # Örneğin: max(settings.INITIAL_ORDER_SIZE_USDT, self.status["current_balance"])
-                settings.ORDER_SIZE_USDT = self.status["current_balance"] 
-                
-                print(f"Güncel bakiye: {self.status['current_balance']:.2f} USDT. Sonraki işlem boyutu: {settings.ORDER_SIZE_USDT:.2f} USDT.")
-                
-                self.status["position_side"] = None
-                self.status["in_position"] = False
-                
-                # Pozisyon kapandıktan sonra bir sonraki uygun coine geç
-                await self._try_next_symbol()
-                return # Pozisyon kapandığı için bu döngüde yeni sinyal analizine devam etme
+            # Pozisyon kapandıysa PNL hesapla
+            if was_in_position and tracker.position_side:
+                await self._handle_position_closed(symbol)
+            tracker.position_side = None
 
-        # Yeni sinyali al
-        signal = trading_strategy.analyze_klines(self.klines)
-        self.status["last_signal"] = signal
-        print(f"Strateji analizi sonucu: {signal}")
+        # Strateji analizi
+        signal = trading_strategy.analyze_klines(tracker.klines)
+        tracker.last_signal = signal
+        
+        print(f"📈 {symbol} sinyal analizi: {signal}")
 
-        # Ek onay kontrolü (Yeni Eklendi)
-        if settings.USE_ADDITIONAL_CONFIRMATION and signal != "HOLD":
-            print(f"Ek onay kontrolü yapılıyor ({settings.CONFIRMATION_TIMEFRAME})...")
-            # Daha büyük zaman dilimi verisini çek
-            confirmation_klines = await binance_client.get_historical_klines(current_symbol, settings.CONFIRMATION_TIMEFRAME, limit=50)
-            if not confirmation_klines:
-                print(f"Ek onay için geçmiş veri alınamadı. Sinyal yoksayılıyor.")
-                return # Ek onay alınamazsa sinyali yoksay
+        # İşlem mantığı
+        await self._process_signal_for_coin(symbol, signal)
+        
+        # Durumu güncelle
+        self._update_coin_status(symbol)
 
-            confirmation_signal = trading_strategy.analyze_klines(confirmation_klines)
-            print(f"Ek onay sinyali ({settings.CONFIRMATION_TIMEFRAME}): {confirmation_signal}")
+    async def _process_signal_for_coin(self, symbol: str, signal: str):
+        """Coin için sinyal işleme mantığı"""
+        tracker = self.coin_trackers[symbol]
+        order_size = self.status["active_coins"][symbol]["order_size_usdt"]
+
+        # Eğer pozisyon yoksa ve sinyal varsa aç
+        if not tracker.in_position and signal != "HOLD":
+            await self._open_position_for_coin(symbol, signal, order_size)
+        
+        # Eğer pozisyon varsa ve sinyal farklıysa değiştir
+        elif tracker.in_position and signal != "HOLD" and signal != tracker.position_side:
+            print(f"🔄 {symbol} pozisyon değişimi: {tracker.position_side} → {signal}")
+            await self._close_position_for_coin(symbol)
+            await asyncio.sleep(0.5)  # Pozisyon kapanması için bekleme
+            await self._open_position_for_coin(symbol, signal, order_size)
+
+    async def _open_position_for_coin(self, symbol: str, signal: str, order_size_usdt: float):
+        """Belirli coin için pozisyon açar"""
+        tracker = self.coin_trackers[symbol]
+        side = "BUY" if signal == "LONG" else "SELL"
+        price = await binance_client.get_market_price(symbol)
+        
+        if not price:
+            print(f"❌ {symbol} için piyasa fiyatı alınamadı.")
+            return
+
+        quantity = self._format_quantity(
+            (order_size_usdt / price) * settings.LEVERAGE, 
+            tracker.quantity_precision
+        )
+        
+        if quantity <= 0:
+            print(f"❌ {symbol} için hesaplanan miktar çok düşük.")
+            return
+
+        order = await binance_client.create_market_order_with_sl_tp(
+            symbol, side, quantity, price, tracker.price_precision
+        )
+        
+        if order:
+            tracker.position_side = signal
+            tracker.in_position = True
+            print(f"✅ {symbol} {signal} pozisyonu açıldı: {price} USDT")
             
-            if signal != confirmation_signal:
-                print(f"Sinyaller uyuşmuyor ({signal} vs {confirmation_signal}). İşlem açılmıyor.")
-                return # Sinyaller uyuşmuyorsa işlem açma
+            firebase_manager.log_trade({
+                "symbol": symbol,
+                "entry_price": price,
+                "side": signal,
+                "quantity": quantity,
+                "order_size_usdt": order_size_usdt,
+                "status": "OPEN",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
 
-        # Eğer şu an pozisyonda değilsek ve yeni bir sinyal varsa, pozisyon aç
-        if not self.status["in_position"] and signal != "HOLD":
-            print(f"--> Yeni {signal} pozisyonu açılıyor...")
-            side = "BUY" if signal == "LONG" else "SELL"
-            price = await binance_client.get_market_price(current_symbol)
-            
-            if not price:
-                print("Yeni pozisyon için piyasa fiyatı alınamadı.")
-                self.status["status_message"] = "Piyasa fiyatı alınamadı, pozisyon açılamadı."
-                return
+    async def _close_position_for_coin(self, symbol: str):
+        """Belirli coin için pozisyonu kapatır"""
+        tracker = self.coin_trackers[symbol]
+        
+        if not tracker.in_position:
+            return
 
-            # Dinamik işlem boyutu hesaplaması
-            # ORDER_SIZE_USDT şu anki güncel bakiyemizle aynı olacak
-            quantity = self._format_quantity((settings.ORDER_SIZE_USDT / price) * settings.LEVERAGE)
-            
-            if quantity <= 0:
-                print("Hesaplanan miktar çok düşük. İşlem açılamadı.")
-                self.status["status_message"] = "Hesaplanan miktar çok düşük, pozisyon açılamadı."
-                return
+        open_positions = await binance_client.get_open_positions(symbol)
+        if not open_positions:
+            return
 
-            order = await binance_client.create_market_order_with_sl_tp(current_symbol, side, quantity, price, self.price_precision)
-            
-            if order:
-                self.status["position_side"] = signal
-                self.status["in_position"] = True
-                self.status["status_message"] = f"Yeni {signal} pozisyonu {price} fiyattan açıldı."
-                firebase_manager.log_trade({
-                    "symbol": current_symbol, 
-                    "entry_price": price, 
-                    "side": signal, 
-                    "quantity": quantity, 
-                    "status": "OPEN", 
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                })
-            else:
-                self.status["position_side"] = None
-                self.status["in_position"] = False
-                self.status["status_message"] = "Yeni pozisyon açılamadı."
-            print(self.status["status_message"])
+        position_amt = float(open_positions[0]['positionAmt'])
+        side_to_close = 'SELL' if position_amt > 0 else 'BUY'
+        
+        response = await binance_client.close_position(symbol, position_amt, side_to_close)
+        
+        if response:
+            print(f"🔴 {symbol} pozisyonu kapatıldı.")
+            tracker.in_position = False
+            tracker.position_side = None
 
-    def _format_quantity(self, quantity: float):
-        """Miktarı, sembolün hassasiyetine göre formatlar."""
-        if self.quantity_precision == 0:
+    async def _handle_position_closed(self, symbol: str):
+        """Pozisyon kapandığında PNL hesaplar ve kaydeder"""
+        pnl = await binance_client.get_last_trade_pnl(symbol)
+        log_status = "CLOSED_BY_TP" if pnl > 0 else ("CLOSED_BY_SL" if pnl < 0 else "CLOSED_MANUALLY")
+        
+        # Toplam bakiyeyi güncelle
+        self.status["total_balance"] += pnl
+        self.status["active_coins"][symbol]["pnl"] += pnl
+        
+        print(f"💰 {symbol} PNL: {pnl:.2f} USDT. Toplam bakiye: {self.status['total_balance']:.2f} USDT")
+        
+        firebase_manager.log_trade({
+            "symbol": symbol,
+            "pnl": pnl,
+            "status": log_status,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+
+    def _format_quantity(self, quantity: float, precision: int):
+        """Miktarı hassasiyete göre formatlar"""
+        if precision == 0:
             return math.floor(quantity)
-        factor = 10 ** self.quantity_precision
+        factor = 10 ** precision
         return math.floor(quantity * factor) / factor
+
+    def _update_coin_status(self, symbol: str):
+        """Coin durumunu günceller"""
+        if symbol not in self.coin_trackers:
+            return
+            
+        tracker = self.coin_trackers[symbol]
+        self.status["active_coins"][symbol].update({
+            "position_side": tracker.position_side,
+            "in_position": tracker.in_position,
+            "last_signal": tracker.last_signal
+        })
+        
+        # Toplam pozisyon sayısını güncelle
+        self.status["total_positions"] = sum(
+            1 for coin_status in self.status["active_coins"].values() 
+            if coin_status["in_position"]
+        )
+        
+        self._update_status_message()
+
+    def _update_status_message(self):
+        """Durum mesajını günceller"""
+        active_count = len(self.status["active_coins"])
+        position_count = self.status["total_positions"]
+        
+        if not self.status["is_running"]:
+            self.status["status_message"] = "Bot durduruldu."
+        elif active_count == 0:
+            self.status["status_message"] = "Bot çalışıyor, coin bekleniyor."
+        else:
+            self.status["status_message"] = f"{active_count} coin izleniyor, {position_count} pozisyon açık."
+
+    def get_detailed_status(self):
+        """Detaylı durum bilgisi döndürür"""
+        return {
+            **self.status,
+            "coin_details": {
+                symbol: {
+                    **coin_status,
+                    "last_signal": self.coin_trackers[symbol].last_signal if symbol in self.coin_trackers else "N/A"
+                }
+                for symbol, coin_status in self.status["active_coins"].items()
+            }
+        }
 
 bot_core = BotCore()
