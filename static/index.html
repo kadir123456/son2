@@ -936,4 +936,177 @@
             }
 
             const result = await fetchApi('/api/remove-coin', {
-                method: 'POST
+                method: 'POST',
+                body: JSON.stringify({ symbol: symbol })
+            });
+
+            if (result) {
+                updateStatusMessage(`✅ ${symbol} başarıyla kaldırıldı!`, 'success');
+                updateUI(result.status);
+            }
+        }
+
+        // Make removeCoin globally available
+        window.removeCoin = removeCoin;
+
+        // UI Update Functions
+        function updateUI(data) {
+            if (!data) return;
+
+            // Bot Status
+            botStatus.innerHTML = data.is_running ? 
+                '<span class="badge badge-success">🟢 Çalışıyor</span>' : 
+                '<span class="badge badge-danger">🔴 Durdurulmuş</span>';
+
+            // Balance and Counts
+            totalBalance.textContent = `${(data.total_balance || 0).toFixed(2)} USDT`;
+            activeCoinsCount.textContent = Object.keys(data.active_coins || {}).length;
+            totalPositions.textContent = data.total_positions || 0;
+
+            // Button States
+            startMonitoringBtn.disabled = data.is_running;
+            stopAllBtn.disabled = !data.is_running;
+            addCoinBtn.disabled = !data.is_running;
+
+            // Update Coins Display
+            updateCoinsDisplay(data.coin_details || {});
+        }
+
+        function updateCoinsDisplay(coinDetails) {
+            if (Object.keys(coinDetails).length === 0) {
+                coinsContainer.innerHTML = '<div class="no-data">Henüz coin eklenmedi</div>';
+                return;
+            }
+
+            const coinsHTML = Object.entries(coinDetails).map(([symbol, details]) => {
+                const positionBadge = details.in_position ? 
+                    '<span class="badge badge-success">📍 Pozisyonda</span>' : 
+                    '<span class="badge badge-info">⏳ Beklemede</span>';
+
+                const pnlClass = (details.pnl || 0) >= 0 ? 'positive' : 'negative';
+                const signalBadge = getSignalBadge(details.last_signal);
+
+                return `
+                    <div class="coin-item">
+                        <div class="coin-header">
+                            <div class="coin-symbol">${symbol}</div>
+                            <button onclick="removeCoin('${symbol}')" class="btn btn-danger btn-sm">
+                                🗑️ Kaldır
+                            </button>
+                        </div>
+                        <div class="coin-info">
+                            <div class="info-item">
+                                <div class="info-label">Durum</div>
+                                <div class="info-value">${positionBadge}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Pozisyon Yönü</div>
+                                <div class="info-value">${details.position_side || 'Yok'}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Son Sinyal</div>
+                                <div class="info-value">${signalBadge}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">İşlem Boyutu</div>
+                                <div class="info-value">${(details.order_size_usdt || 0).toFixed(2)} USDT</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">P&L</div>
+                                <div class="info-value ${pnlClass}">${(details.pnl || 0).toFixed(2)} USDT</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            coinsContainer.innerHTML = coinsHTML;
+        }
+
+        function getSignalBadge(signal) {
+            switch (signal) {
+                case 'LONG':
+                    return '<span class="badge badge-success">📈 LONG</span>';
+                case 'SHORT':
+                    return '<span class="badge badge-danger">📉 SHORT</span>';
+                case 'HOLD':
+                    return '<span class="badge badge-warning">⏸️ BEKLE</span>';
+                default:
+                    return '<span class="badge badge-info">📊 N/A</span>';
+            }
+        }
+
+        function updateStatusMessage(message, type = 'info') {
+            statusMessage.textContent = message;
+            statusMessage.parentElement.className = `alert alert-${type}`;
+        }
+
+        // Status Polling
+        async function getStatus() {
+            const data = await fetchApi('/api/status');
+            if (data) updateUI(data);
+        }
+
+        // Firebase Statistics
+        function listenForTradeUpdates() {
+            const tradesRef = database.ref('trades');
+            tradesRef.on('value', (snapshot) => {
+                const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
+                calculateAndDisplayStats(trades);
+            });
+        }
+
+        function calculateAndDisplayStats(trades) {
+            let totalTrades = 0;
+            let winningTrades = 0;
+            let losingTrades = 0;
+            let totalProfit = 0;
+            let totalLoss = 0;
+
+            trades.forEach(trade => {
+                if (trade.status && trade.status !== "OPEN") {
+                    totalTrades++;
+                    const pnl = parseFloat(trade.pnl) || 0;
+                    
+                    if (pnl > 0) {
+                        winningTrades++;
+                        totalProfit += pnl;
+                    } else if (pnl < 0) {
+                        losingTrades++;
+                        totalLoss += Math.abs(pnl);
+                    }
+                }
+            });
+
+            const netPnl = totalProfit - totalLoss;
+            const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
+
+            // Update Stats
+            statsTotal.textContent = totalTrades;
+            statsWinning.textContent = `${winningTrades} (${winRate}%)`;
+            statsLosing.textContent = `${losingTrades} (${(100 - winRate).toFixed(1)}%)`;
+            
+            // Format Net P&L
+            statsNetPnl.textContent = netPnl.toFixed(2);
+            statsNetPnl.className = `stat-value ${netPnl >= 0 ? 'positive' : 'negative'}`;
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Enter to add coin when symbol input is focused
+            if (e.key === 'Enter' && document.activeElement === symbolInput) {
+                e.preventDefault();
+                addCoinBtn.click();
+            }
+        });
+
+        // Auto-uppercase symbol input
+        symbolInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Initialize
+        console.log('🚀 Multi-Coin Trading Bot initialized');
+    </script>
+</body>
+</html>
