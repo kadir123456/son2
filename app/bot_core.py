@@ -240,7 +240,7 @@ class BotCore:
         self._update_coin_status(symbol)
 
     async def _process_signal_for_coin(self, symbol: str, signal: str):
-        """Coin için sinyal işleme mantığı"""
+        """Geliştirilmiş sinyal işleme mantığı"""
         tracker = self.coin_trackers[symbol]
         order_size = self.status["active_coins"][symbol]["order_size_usdt"]
 
@@ -248,12 +248,23 @@ class BotCore:
         if not tracker.in_position and signal != "HOLD":
             await self._open_position_for_coin(symbol, signal, order_size)
         
-        # Eğer pozisyon varsa ve sinyal farklıysa değiştir
+        # Eğer pozisyon varsa ve sinyal farklıysa - akıllı pozisyon değiştirme
         elif tracker.in_position and signal != "HOLD" and signal != tracker.position_side:
-            print(f"🔄 {symbol} pozisyon değişimi: {tracker.position_side} → {signal}")
-            await self._close_position_for_coin(symbol)
-            await asyncio.sleep(0.5)  # Pozisyon kapanması için bekleme
-            await self._open_position_for_coin(symbol, signal, order_size)
+            # Strateji güvenilirliğini kontrol et
+            if trading_strategy.should_reverse_position(symbol, tracker.position_side, signal):
+                print(f"🔄 {symbol} pozisyon değişimi: {tracker.position_side} → {signal}")
+                await self._close_position_for_coin(symbol)
+                await asyncio.sleep(1.0)  # Pozisyon kapanması için daha uzun bekleme
+                await self._open_position_for_coin(symbol, signal, order_size)
+            else:
+                print(f"⚠️ {symbol} pozisyon değişimi güvenilirlik kontrolünden geçemedi")
+        
+        # Eğer HOLD sinyali gelirse ve pozisyon açıksa, pozisyonu kapat (opsiyonel)
+        elif tracker.in_position and signal == "HOLD":
+            # Bu özellik isteğe bağlı - config'den kontrol edilebilir
+            if hasattr(settings, 'CLOSE_ON_HOLD_SIGNAL') and settings.CLOSE_ON_HOLD_SIGNAL:
+                print(f"⏸️ {symbol} HOLD sinyali nedeniyle pozisyon kapatılıyor")
+                await self._close_position_for_coin(symbol)
 
     async def _open_position_for_coin(self, symbol: str, signal: str, order_size_usdt: float):
         """Belirli coin için pozisyon açar"""
