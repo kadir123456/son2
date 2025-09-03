@@ -62,7 +62,7 @@ async function initializeFirebase() {
             }
             
             firebaseConfig = await response.json();
-            console.log('✅ Firebase config backend'den alındı');
+            console.log('✅ Firebase config backend\'den alındı');
             
         } catch (backendError) {
             console.warn('⚠️ Backend\'den config alınamadı, fallback kullanılıyor:', backendError.message);
@@ -152,7 +152,9 @@ function setupEventListeners() {
     
     // Logout button
     if (elements.logoutBtn) {
-        elements.logoutBtn.addEventListener('click', () => auth.signOut());
+        elements.logoutBtn.addEventListener('click', function() {
+            auth.signOut();
+        });
     }
     
     // Test buttons
@@ -179,11 +181,11 @@ function setupEventListeners() {
     
     // Symbol input auto-uppercase and enter key
     if (elements.symbolInput) {
-        elements.symbolInput.addEventListener('input', (e) => {
+        elements.symbolInput.addEventListener('input', function(e) {
             e.target.value = e.target.value.toUpperCase();
         });
         
-        elements.symbolInput.addEventListener('keydown', (e) => {
+        elements.symbolInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 if (elements.addCoinBtn) elements.addCoinBtn.click();
@@ -196,10 +198,10 @@ function setupEventListeners() {
 async function handleLogin(e) {
     e.preventDefault();
     
-    const email = elements.emailInput?.value?.trim();
-    const password = elements.passwordInput?.value?.trim();
+    const email = elements.emailInput ? elements.emailInput.value.trim() : '';
+    const password = elements.passwordInput ? elements.passwordInput.value.trim() : '';
     
-    console.log('Giriş denemesi:', { email, password: password ? '***' : 'boş' });
+    console.log('Giriş denemesi:', { email: email, password: password ? '***' : 'boş' });
     
     if (!email || !password) {
         showError('E-posta ve şifre alanları boş olamaz!');
@@ -235,7 +237,7 @@ async function handleLogin(e) {
                 errorMessage = 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.';
                 break;
             default:
-                errorMessage = `Hata: ${error.message}`;
+                errorMessage = 'Hata: ' + error.message;
         }
         
         showError(errorMessage);
@@ -252,12 +254,12 @@ async function createTestUser() {
         console.log('Test kullanıcısı oluşturuluyor...');
         const userCredential = await auth.createUserWithEmailAndPassword(email, password);
         console.log('✅ Test kullanıcı oluşturuldu:', userCredential.user.email);
-        alert(`✅ Test kullanıcısı oluşturuldu!\nE-posta: ${email}\nŞifre: ${password}`);
+        alert('✅ Test kullanıcısı oluşturuldu!\nE-posta: ' + email + '\nŞifre: ' + password);
     } catch (error) {
         console.error('❌ Test kullanıcı hatası:', error);
         
         if (error.code === 'auth/email-already-in-use') {
-            alert(`ℹ️ Test kullanıcısı zaten mevcut!\nE-posta: test@example.com\nŞifre: test123456`);
+            alert('ℹ️ Test kullanıcısı zaten mevcut!\nE-posta: test@example.com\nŞifre: test123456');
         } else {
             alert('❌ Test kullanıcısı oluşturulamadı: ' + error.message);
         }
@@ -271,7 +273,7 @@ async function testFirebaseConnection() {
         
         // Auth test
         const currentUser = auth.currentUser;
-        console.log('Mevcut kullanıcı:', currentUser?.email || 'Yok');
+        console.log('Mevcut kullanıcı:', currentUser ? currentUser.email : 'Yok');
         
         // Database test
         const testRef = database.ref('test');
@@ -311,8 +313,8 @@ async function stopAll() {
 }
 
 async function addCoin() {
-    const symbol = elements.symbolInput?.value?.trim()?.toUpperCase();
-    const orderSize = parseFloat(elements.orderSizeInput?.value);
+    const symbol = elements.symbolInput ? elements.symbolInput.value.trim().toUpperCase() : '';
+    const orderSize = elements.orderSizeInput ? parseFloat(elements.orderSizeInput.value) : 0;
 
     if (!symbol) {
         updateStatusMessage('❌ Coin sembolü boş olamaz!', 'danger');
@@ -334,7 +336,7 @@ async function addCoin() {
     });
 
     if (result) {
-        updateStatusMessage(`✅ ${symbol} başarıyla eklendi!`, 'success');
+        updateStatusMessage('✅ ' + symbol + ' başarıyla eklendi!', 'success');
         if (elements.symbolInput) elements.symbolInput.value = '';
         if (elements.orderSizeInput) elements.orderSizeInput.value = '50';
         updateUI(result.status);
@@ -343,7 +345,7 @@ async function addCoin() {
 
 // Remove coin function (globally accessible)
 window.removeCoin = async function(symbol) {
-    if (!confirm(`${symbol} coin'ini kaldırmak istediğinizden emin misiniz?\nAçık pozisyon varsa kapatılacaktır!`)) {
+    if (!confirm(symbol + ' coin\'ini kaldırmak istediğinizden emin misiniz?\nAçık pozisyon varsa kapatılacaktır!')) {
         return;
     }
 
@@ -354,14 +356,14 @@ window.removeCoin = async function(symbol) {
     });
 
     if (result) {
-        updateStatusMessage(`✅ ${symbol} başarıyla kaldırıldı!`, 'success');
+        updateStatusMessage('✅ ' + symbol + ' başarıyla kaldırıldı!', 'success');
         updateUI(result.status);
     }
 };
 
 // API request function
-async function fetchApi(endpoint, options = {}) {
-    const user = auth?.currentUser;
+async function fetchApi(endpoint, options) {
+    const user = auth ? auth.currentUser : null;
     if (!user) {
         console.warn('Kullanıcı giriş yapmamış');
         return null;
@@ -370,27 +372,39 @@ async function fetchApi(endpoint, options = {}) {
     try {
         const idToken = await user.getIdToken(true);
         const headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${idToken}`,
+            'Authorization': 'Bearer ' + idToken,
             'Content-Type': 'application/json'
         };
 
-        const response = await fetch(endpoint, {
-            ...options,
-            headers
-        });
+        if (options && options.headers) {
+            Object.assign(headers, options.headers);
+        }
+
+        const fetchOptions = {
+            method: options && options.method ? options.method : 'GET',
+            headers: headers
+        };
+
+        if (options && options.body) {
+            fetchOptions.body = options.body;
+        }
+
+        const response = await fetch(endpoint, fetchOptions);
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({
-                detail: response.statusText
-            }));
-            throw new Error(errorData.detail);
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                errorData = { detail: response.statusText };
+            }
+            throw new Error(errorData.detail || 'API Error');
         }
 
         return response.json();
     } catch (error) {
         console.error('API Hatası:', error);
-        updateStatusMessage(`❌ ${error.message}`, 'danger');
+        updateStatusMessage('❌ ' + error.message, 'danger');
         return null;
     }
 }
@@ -403,17 +417,21 @@ function updateUI(data) {
 
     // Bot Status
     if (elements.botStatus) {
-        elements.botStatus.innerHTML = data.is_running ? 
-            '<span class="badge badge-success">🟢 Çalışıyor</span>' : 
-            '<span class="badge badge-danger">🔴 Durdurulmuş</span>';
+        if (data.is_running) {
+            elements.botStatus.innerHTML = '<span class="badge badge-success">🟢 Çalışıyor</span>';
+        } else {
+            elements.botStatus.innerHTML = '<span class="badge badge-danger">🔴 Durdurulmuş</span>';
+        }
     }
 
     // Balance and Counts
     if (elements.totalBalance) {
-        elements.totalBalance.textContent = `${(data.total_balance || 0).toFixed(2)} USDT`;
+        const balance = data.total_balance || 0;
+        elements.totalBalance.textContent = balance.toFixed(2) + ' USDT';
     }
     if (elements.activeCoinsCount) {
-        elements.activeCoinsCount.textContent = Object.keys(data.active_coins || {}).length;
+        const coinCount = data.active_coins ? Object.keys(data.active_coins).length : 0;
+        elements.activeCoinsCount.textContent = coinCount;
     }
     if (elements.totalPositions) {
         elements.totalPositions.textContent = data.total_positions || 0;
@@ -425,7 +443,8 @@ function updateUI(data) {
     if (elements.addCoinBtn) elements.addCoinBtn.disabled = !data.is_running;
 
     // Update Coins Display
-    updateCoinsDisplay(data.coin_details || {});
+    const coinDetails = data.coin_details || {};
+    updateCoinsDisplay(coinDetails);
 }
 
 function updateCoinsDisplay(coinDetails) {
@@ -436,15 +455,20 @@ function updateCoinsDisplay(coinDetails) {
         return;
     }
 
-    const coinsHTML = Object.entries(coinDetails).map(([symbol, details]) => {
+    let coinsHTML = '';
+    for (const symbol in coinDetails) {
+        const details = coinDetails[symbol];
+        
         const positionBadge = details.in_position ? 
             '<span class="badge badge-success">📍 Pozisyonda</span>' : 
             '<span class="badge badge-info">⏳ Beklemede</span>';
 
         const pnlClass = (details.pnl || 0) >= 0 ? 'positive' : 'negative';
         const signalBadge = getSignalBadge(details.last_signal);
+        const orderSize = details.order_size_usdt || 0;
+        const pnl = details.pnl || 0;
 
-        return `
+        coinsHTML += `
             <div class="coin-item">
                 <div class="coin-header">
                     <div class="coin-symbol">${symbol}</div>
@@ -467,16 +491,16 @@ function updateCoinsDisplay(coinDetails) {
                     </div>
                     <div class="info-item">
                         <div class="info-label">İşlem Boyutu</div>
-                        <div class="info-value">${(details.order_size_usdt || 0).toFixed(2)} USDT</div>
+                        <div class="info-value">${orderSize.toFixed(2)} USDT</div>
                     </div>
                     <div class="info-item">
                         <div class="info-label">P&L</div>
-                        <div class="info-value ${pnlClass}">${(details.pnl || 0).toFixed(2)} USDT</div>
+                        <div class="info-value ${pnlClass}">${pnl.toFixed(2)} USDT</div>
                     </div>
                 </div>
             </div>
         `;
-    }).join('');
+    }
 
     elements.coinsContainer.innerHTML = coinsHTML;
 }
@@ -494,14 +518,14 @@ function getSignalBadge(signal) {
     }
 }
 
-function updateStatusMessage(message, type = 'info') {
+function updateStatusMessage(message, type) {
     if (elements.statusMessage) {
         elements.statusMessage.textContent = message;
         if (elements.statusMessage.parentElement) {
-            elements.statusMessage.parentElement.className = `alert alert-${type}`;
+            elements.statusMessage.parentElement.className = 'alert alert-' + (type || 'info');
         }
     }
-    console.log(`Status: ${message}`);
+    console.log('Status: ' + message);
 }
 
 // Status polling
@@ -514,7 +538,7 @@ async function getStatus() {
 function listenForTradeUpdates() {
     try {
         const tradesRef = database.ref('trades');
-        tradesRef.on('value', (snapshot) => {
+        tradesRef.on('value', function(snapshot) {
             const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
             calculateAndDisplayStats(trades);
         });
@@ -530,7 +554,7 @@ function calculateAndDisplayStats(trades) {
     let totalProfit = 0;
     let totalLoss = 0;
 
-    trades.forEach(trade => {
+    trades.forEach(function(trade) {
         if (trade.status && trade.status !== "OPEN") {
             totalTrades++;
             const pnl = parseFloat(trade.pnl) || 0;
@@ -551,16 +575,17 @@ function calculateAndDisplayStats(trades) {
     // Update Stats
     if (elements.statsTotal) elements.statsTotal.textContent = totalTrades;
     if (elements.statsWinning) {
-        elements.statsWinning.textContent = `${winningTrades} (${winRate}%)`;
+        elements.statsWinning.textContent = winningTrades + ' (' + winRate + '%)';
     }
     if (elements.statsLosing) {
-        elements.statsLosing.textContent = `${losingTrades} (${(100 - winRate).toFixed(1)}%)`;
+        const loseRate = (100 - winRate).toFixed(1);
+        elements.statsLosing.textContent = losingTrades + ' (' + loseRate + '%)';
     }
     
     // Format Net P&L
     if (elements.statsNetPnl) {
         elements.statsNetPnl.textContent = netPnl.toFixed(2);
-        elements.statsNetPnl.className = `stat-value ${netPnl >= 0 ? 'positive' : 'negative'}`;
+        elements.statsNetPnl.className = 'stat-value ' + (netPnl >= 0 ? 'positive' : 'negative');
     }
 }
 
@@ -597,7 +622,7 @@ function setLoading(loading) {
 }
 
 // Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 DOM yüklendi, Firebase başlatılıyor...');
     await initializeFirebase();
 });
