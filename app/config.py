@@ -19,29 +19,49 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 10
-    INITIAL_ORDER_SIZE_USDT: float = 40.0  # Katlamalı sistem için başlangıç işlem boyutu
+    INITIAL_ORDER_SIZE_USDT: float = 50.0  # Varsayılan işlem boyutu
     
-    # Bu değişken bot_core tarafından dinamik olarak güncellenecek.
-    # Başlangıçta INITIAL_ORDER_SIZE_USDT değerini alır.
-    ORDER_SIZE_USDT: float = INITIAL_ORDER_SIZE_USDT 
-    
-    TIMEFRAME: str = "15m"  # ANA İŞLEM ZAMAN DİLİMİ (5m yerine 3m önerisi)
-    
-    # Botun analiz edeceği coin sembolleri listesi
-    # NOT: USDT pariteleri olmalıdır (örn: BTCUSDT, ETHUSDT)
-    # Varsayılan olarak 10 adet coin eklendi. İstediğiniz coinleri buraya ekleyebilirsiniz.
-    SYMBOLS_TO_TRADE: list[str] = [
-        "SUIUSDT"
-    ]
+    # Ana işlem zaman dilimi - EMA kesişim stratejisi için
+    TIMEFRAME: str = "5m"  # 5 dakikalık mumlar (daha hızlı sinyaller için)
     
     # --- Kâr/Zarar Ayarları ---
     STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
     TAKE_PROFIT_PERCENT: float = 0.03 # %3 Kar Al
 
-    # --- Ek Onay Ayarları ---
-    # EMA kesişimine ek bir onay kullanılsın mı?
-    # Eğer True ise, CONFIRMATION_TIMEFRAME'deki strateji sinyali de aynı yönde olmalı.
-    USE_ADDITIONAL_CONFIRMATION: bool = False # EK ONAY DEVRE DIŞI BIRAKILDI
-    CONFIRMATION_TIMEFRAME: str = "15m" # Ek onay için zaman dilimi (Bu ayar artık USE_ADDITIONAL_CONFIRMATION False olduğu için etkisizdir)
+    # --- Çoklu Coin Ayarları ---
+    # Maksimum aynı anda açık olabilecek pozisyon sayısı
+    MAX_CONCURRENT_POSITIONS: int = 5
+    
+    # Her coin için minimum işlem boyutu (USDT)
+    MIN_ORDER_SIZE_USDT: float = 10.0
+    
+    # Bot'un kullanabileceği maksimum bakiye yüzdesi (güvenlik için)
+    MAX_BALANCE_USAGE_PERCENT: float = 0.8  # %80
+
+    # --- Strateji Ayarları ---
+    # EMA periyotları
+    SHORT_EMA_PERIOD: int = 9
+    LONG_EMA_PERIOD: int = 21
+    
+    # Sinyal filtreleme - aynı yönde art arda kaç sinyal gelmeli
+    SIGNAL_CONFIRMATION_COUNT: int = 1  # 1 = Doğrudan işlem aç
+    
+    # Pozisyon değiştirme gecikme süresi (saniye) - çok sık işlem yapmamak için
+    POSITION_CHANGE_DELAY: float = 30.0
+    
+    # --- Ek Onay Ayarları (İsteğe Bağlı) ---
+    # Bu özellik şu an devre dışı bırakıldı
+    USE_ADDITIONAL_CONFIRMATION: bool = False
+    CONFIRMATION_TIMEFRAME: str = "15m"
+
+    # --- Risk Yönetimi ---
+    # Günlük maksimum zarar limiti (USDT)
+    DAILY_LOSS_LIMIT: float = 200.0
+    
+    # Günlük maksimum işlem sayısı (spam önleme)
+    DAILY_TRADE_LIMIT: int = 50
+    
+    # Pozisyon boyutu risk çarpanı (volatil coinler için küçük pozisyon)
+    POSITION_SIZE_MULTIPLIER: float = 1.0
 
 settings = Settings()
