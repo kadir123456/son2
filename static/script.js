@@ -52,14 +52,33 @@ async function initializeFirebase() {
     try {
         console.log('Firebase konfigürasyonu alınıyor...');
         
-        // Firebase config'i backend'den al
-        const response = await fetch('/api/firebase-config');
-        if (!response.ok) {
-            throw new Error('Firebase config alınamadı');
-        }
+        let firebaseConfig;
         
-        const firebaseConfig = await response.json();
-        console.log('Firebase config alındı');
+        try {
+            // Firebase config'i backend'den al
+            const response = await fetch('/api/firebase-config');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            firebaseConfig = await response.json();
+            console.log('✅ Firebase config backend'den alındı');
+            
+        } catch (backendError) {
+            console.warn('⚠️ Backend\'den config alınamadı, fallback kullanılıyor:', backendError.message);
+            
+            // Fallback config (geçici çözüm)
+            firebaseConfig = {
+                apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
+                authDomain: "aviator-90c8b.firebaseapp.com",
+                databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
+                projectId: "aviator-90c8b",
+                storageBucket: "aviator-90c8b.appspot.com",
+                messagingSenderId: "823763988442",
+                appId: "1:823763988442:web:16a797275675a219c3dae3"
+            };
+            console.log('🔄 Fallback Firebase config kullanılıyor');
+        }
         
         // Firebase'i başlat
         firebase.initializeApp(firebaseConfig);
