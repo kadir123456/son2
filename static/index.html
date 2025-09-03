@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kısa Vadeli Kesişim Botu</title>
+    <title>Multi-Coin Trading Bot</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +13,7 @@
 
     <div id="login-container" class="container">
         <div class="card login-card">
-            <h1>Bot Kontrol Paneli</h1>
+            <h1>Multi-Coin Bot Kontrol Paneli</h1>
             <p class="subtitle">Lütfen giriş yapın</p>
             <div class="form-group">
                 <label for="email">E-posta</label>
@@ -30,43 +30,62 @@
 
     <div id="app-container" class="container" style="display: none;">
         <header>
-            <h1>Kısa Vadeli Kesişim Botu</h1>
+            <h1>🚀 Multi-Coin Trading Bot</h1>
             <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
         <main>
+            <!-- Bot Kontrolü -->
             <div class="card controls-card">
-                <h2>Bot Yönetimi</h2>
-                <div class="form-group">
-                    <label for="symbol-input">İşlem Yapılacak Coin (Opsiyonel)</label>
-                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT (Boş bırakırsanız listeden başlar)">
-                </div>
+                <h2>🤖 Bot Yönetimi</h2>
                 <div class="button-group">
-                    <button id="start-button" class="btn btn-start">Botu Başlat</button>
-                    <button id="stop-button" class="btn btn-stop" disabled>Botu Durdur</button>
+                    <button id="start-monitoring-button" class="btn btn-start">Bot'u Başlat</button>
+                    <button id="stop-all-button" class="btn btn-stop" disabled>Tümünü Durdur</button>
                 </div>
             </div>
 
+            <!-- Yeni Coin Ekleme -->
+            <div class="card add-coin-card">
+                <h2>➕ Yeni Coin Ekle</h2>
+                <div class="form-group">
+                    <label for="symbol-input">Coin Sembolu</label>
+                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT">
+                </div>
+                <div class="form-group">
+                    <label for="order-size-input">İşlem Boyutu (USDT)</label>
+                    <input type="number" id="order-size-input" placeholder="50" min="1" step="0.01" value="50">
+                </div>
+                <button id="add-coin-button" class="btn btn-primary">Coin Ekle</button>
+            </div>
+
+            <!-- Genel Durum -->
             <div class="card status-card">
-                <h2>Anlık Durum</h2>
+                <h2>📊 Genel Durum</h2>
                 <div class="status-grid">
-                    <p class="status-label">Bot Mesajı:</p>
+                    <p class="status-label">Bot Durumu:</p>
+                    <p class="status-value"><span id="bot-status">Kapalı</span></p>
+                    <p class="status-label">Toplam Bakiye:</p>
+                    <p class="status-value"><span id="total-balance">0.00 USDT</span></p>
+                    <p class="status-label">Aktif Coin Sayısı:</p>
+                    <p class="status-value"><span id="active-coins-count">0</span></p>
+                    <p class="status-label">Açık Pozisyon Sayısı:</p>
+                    <p class="status-value"><span id="total-positions">0</span></p>
+                    <p class="status-label">Mesaj:</p>
                     <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
-                    <p class="status-label">İzlenen Sembol:</p>
-                    <p class="status-value"><span id="current-symbol">N/A</span></p>
-                    <p class="status-label">Pozisyon Durumu:</p>
-                    <p class="status-value"><span id="position-status">Hayır</span></p>
-                    <p class="status-label">Pozisyon Yönü:</p>
-                    <p class="status-value"><span id="position-side">N/A</span></p>
-                    <p class="status-label">Son Sinyal:</p>
-                    <p class="status-value"><span id="last-signal">N/A</span></p>
-                    <p class="status-label">Güncel Bakiye:</p>
-                    <p class="status-value"><span id="current-balance">0.00 USDT</span></p>
                 </div>
             </div>
-            
+
+            <!-- Aktif Coin'ler -->
+            <div class="card coins-card">
+                <h2>🪙 İzlenen Coin'ler</h2>
+                <div id="coins-container">
+                    <p class="no-coins">Henüz coin eklenmedi.</p>
+                </div>
+            </div>
+
+            <!-- İstatistikler -->
             <div class="card stats-card">
-                <h2>Performans İstatistikleri</h2>
+                <h2>📈 Performans İstatistikleri</h2>
                 <div class="stats-grid">
                     <p class="stats-label">Toplam İşlem:</p>
                     <p class="stats-value" id="stats-total-trades">0</p>
@@ -88,6 +107,299 @@
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-database.js"></script>
-    <script src="/static/script.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Firebase Configuration - KENDİ BİLGİLERİNİZİ KULLANIN
+            const firebaseConfig = {
+                apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
+                authDomain: "aviator-90c8b.firebaseapp.com",
+                databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
+                projectId: "aviator-90c8b",
+                storageBucket: "aviator-90c8b.appspot.com",
+                messagingSenderId: "823763988442",
+                appId: "1:823763988442:web:16a797275675a219c3dae3"
+            };
+
+            firebase.initializeApp(firebaseConfig);
+            const auth = firebase.auth();
+            const database = firebase.database();
+
+            // HTML Elementleri
+            const loginContainer = document.getElementById('login-container');
+            const appContainer = document.getElementById('app-container');
+            const loginButton = document.getElementById('login-button');
+            const logoutButton = document.getElementById('logout-button');
+            const emailInput = document.getElementById('email');
+            const passwordInput = document.getElementById('password');
+            const loginError = document.getElementById('login-error');
+
+            // Bot Kontrol Elementleri
+            const startMonitoringButton = document.getElementById('start-monitoring-button');
+            const stopAllButton = document.getElementById('stop-all-button');
+
+            // Coin Ekleme Elementleri
+            const symbolInput = document.getElementById('symbol-input');
+            const orderSizeInput = document.getElementById('order-size-input');
+            const addCoinButton = document.getElementById('add-coin-button');
+
+            // Durum Elementleri
+            const botStatusSpan = document.getElementById('bot-status');
+            const totalBalanceSpan = document.getElementById('total-balance');
+            const activeCoinsCountSpan = document.getElementById('active-coins-count');
+            const totalPositionsSpan = document.getElementById('total-positions');
+            const statusMessageSpan = document.getElementById('status-message');
+            const coinsContainer = document.getElementById('coins-container');
+
+            // İstatistik Elementleri
+            const statsTotal = document.getElementById('stats-total-trades');
+            const statsWinning = document.getElementById('stats-winning-trades');
+            const statsLosing = document.getElementById('stats-losing-trades');
+            const statsTotalProfit = document.getElementById('stats-total-profit');
+            const statsTotalLoss = document.getElementById('stats-total-loss');
+            const statsNetPnl = document.getElementById('stats-net-pnl');
+
+            let statusInterval;
+
+            // Kimlik Doğrulama
+            loginButton.addEventListener('click', () => {
+                loginError.textContent = "";
+                auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+                    .catch(error => {
+                        console.error("Giriş hatası:", error);
+                        loginError.textContent = "Hatalı e-posta veya şifre.";
+                    });
+            });
+
+            logoutButton.addEventListener('click', () => {
+                auth.signOut();
+            });
+
+            auth.onAuthStateChanged(user => {
+                if (user) {
+                    loginContainer.style.display = 'none';
+                    appContainer.style.display = 'flex';
+                    getStatus();
+                    statusInterval = setInterval(getStatus, 3000);
+                    listenForTradeUpdates();
+                } else {
+                    loginContainer.style.display = 'flex';
+                    appContainer.style.display = 'none';
+                    if (statusInterval) clearInterval(statusInterval);
+                }
+            });
+
+            // API İstekleri
+            async function fetchApi(endpoint, options = {}) {
+                const user = auth.currentUser;
+                if (!user) {
+                    console.warn("Kullanıcı giriş yapmamış.");
+                    return null;
+                }
+
+                try {
+                    const idToken = await user.getIdToken(true);
+                    const headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
+                    if (options.body && !headers['Content-Type']) {
+                        headers['Content-Type'] = 'application/json';
+                    }
+
+                    const response = await fetch(endpoint, { ...options, headers });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                        console.error("API Hatası:", errorData.detail);
+                        showError(errorData.detail);
+                        return null;
+                    }
+                    return response.json();
+                } catch (error) {
+                    console.error("API isteği hatası:", error);
+                    showError(`Bağlantı Hatası: ${error.message}`);
+                    return null;
+                }
+            }
+
+            function showError(message) {
+                statusMessageSpan.textContent = `❌ ${message}`;
+                statusMessageSpan.className = 'status-error';
+            }
+
+            function showSuccess(message) {
+                statusMessageSpan.textContent = `✅ ${message}`;
+                statusMessageSpan.className = 'status-success';
+            }
+
+            // Bot Kontrol Fonksiyonları
+            startMonitoringButton.addEventListener('click', async () => {
+                const result = await fetchApi('/api/start-monitoring', { method: 'POST' });
+                if (result) {
+                    showSuccess("Bot monitoring başlatıldı!");
+                    updateUI(result.status);
+                }
+            });
+
+            stopAllButton.addEventListener('click', async () => {
+                const result = await fetchApi('/api/stop-all', { method: 'POST' });
+                if (result) {
+                    showSuccess("Tüm işlemler durduruldu!");
+                    updateUI(result.status);
+                }
+            });
+
+            addCoinButton.addEventListener('click', async () => {
+                const symbol = symbolInput.value.trim().toUpperCase();
+                const orderSize = parseFloat(orderSizeInput.value);
+
+                if (!symbol) {
+                    showError("Coin sembolü boş olamaz!");
+                    return;
+                }
+
+                if (!orderSize || orderSize <= 0) {
+                    showError("İşlem boyutu 0'dan büyük olmalı!");
+                    return;
+                }
+
+                const result = await fetchApi('/api/add-coin', {
+                    method: 'POST',
+                    body: JSON.stringify({ symbol, order_size_usdt: orderSize })
+                });
+
+                if (result) {
+                    showSuccess(`${symbol} başarıyla eklendi!`);
+                    symbolInput.value = '';
+                    orderSizeInput.value = '50';
+                    updateUI(result.status);
+                }
+            });
+
+            // Coin Kaldırma Fonksiyonu
+            async function removeCoin(symbol) {
+                if (!confirm(`${symbol} coin'ini kaldırmak istediğinizden emin misiniz?\nAçık pozisyon varsa kapatılacak!`)) {
+                    return;
+                }
+
+                const result = await fetchApi('/api/remove-coin', {
+                    method: 'POST',
+                    body: JSON.stringify({ symbol })
+                });
+
+                if (result) {
+                    showSuccess(`${symbol} başarıyla kaldırıldı!`);
+                    updateUI(result.status);
+                }
+            }
+
+            // UI Güncelleme
+            function updateUI(data) {
+                if (!data) return;
+
+                // Genel durum güncelleme
+                botStatusSpan.textContent = data.is_running ? '🟢 Çalışıyor' : '🔴 Durdurulmuş';
+                botStatusSpan.className = data.is_running ? 'status-running' : 'status-stopped';
+
+                totalBalanceSpan.textContent = `${data.total_balance ? data.total_balance.toFixed(2) : '0.00'} USDT`;
+                activeCoinsCountSpan.textContent = Object.keys(data.active_coins || {}).length;
+                totalPositionsSpan.textContent = data.total_positions || 0;
+                statusMessageSpan.textContent = data.status_message || 'Bilinmeyen durum';
+
+                // Buton durumları
+                startMonitoringButton.disabled = data.is_running;
+                stopAllButton.disabled = !data.is_running;
+                addCoinButton.disabled = !data.is_running;
+
+                // Coin listesini güncelle
+                updateCoinsDisplay(data.coin_details || {});
+            }
+
+            function updateCoinsDisplay(coinDetails) {
+                if (Object.keys(coinDetails).length === 0) {
+                    coinsContainer.innerHTML = '<p class="no-coins">Henüz coin eklenmedi.</p>';
+                    return;
+                }
+
+                const coinsHTML = Object.entries(coinDetails).map(([symbol, details]) => {
+                    const positionStatus = details.in_position ? '🟢 Pozisyonda' : '⚪ Beklemede';
+                    const positionSide = details.position_side || 'Yok';
+                    const lastSignal = details.last_signal || 'N/A';
+                    const orderSize = details.order_size_usdt || 0;
+                    const pnl = details.pnl || 0;
+
+                    return `
+                        <div class="coin-item">
+                            <div class="coin-header">
+                                <h3>${symbol}</h3>
+                                <button onclick="removeCoin('${symbol}')" class="btn-remove">🗑️</button>
+                            </div>
+                            <div class="coin-info">
+                                <span class="coin-status ${details.in_position ? 'in-position' : ''}">${positionStatus}</span>
+                                <span class="coin-side">${positionSide}</span>
+                                <span class="coin-signal">📊 ${lastSignal}</span>
+                                <span class="coin-size">💰 ${orderSize} USDT</span>
+                                <span class="coin-pnl ${pnl >= 0 ? 'positive' : 'negative'}">📈 ${pnl.toFixed(2)} USDT</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                coinsContainer.innerHTML = coinsHTML;
+            }
+
+            // Global fonksiyon olarak removeCoin'i tanımla
+            window.removeCoin = removeCoin;
+
+            // Durum sorgulama
+            async function getStatus() {
+                const data = await fetchApi('/api/status');
+                if (data) updateUI(data);
+            }
+
+            // Firebase İstatistikleri
+            function listenForTradeUpdates() {
+                const tradesRef = database.ref('trades');
+                tradesRef.on('value', (snapshot) => {
+                    const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
+                    calculateAndDisplayStats(trades);
+                });
+            }
+
+            function calculateAndDisplayStats(trades) {
+                let totalTrades = 0;
+                let winningTrades = 0, losingTrades = 0;
+                let totalProfit = 0, totalLoss = 0;
+
+                trades.forEach(trade => {
+                    if (trade.status && trade.status !== "OPEN") {
+                        totalTrades++;
+                        const pnl = parseFloat(trade.pnl) || 0;
+                        if (pnl > 0) {
+                            winningTrades++;
+                            totalProfit += pnl;
+                        } else if (pnl < 0) {
+                            losingTrades++;
+                            totalLoss += pnl;
+                        }
+                    }
+                });
+
+                const netPnl = totalProfit + totalLoss;
+
+                statsTotal.textContent = totalTrades;
+                const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
+                const loseRate = totalTrades > 0 ? ((losingTrades / totalTrades) * 100).toFixed(1) : 0;
+                statsWinning.textContent = `${winningTrades} (%${winRate})`;
+                statsLosing.textContent = `${losingTrades} (%${loseRate})`;
+
+                formatPnl(statsTotalProfit, totalProfit);
+                formatPnl(statsTotalLoss, totalLoss);
+                formatPnl(statsNetPnl, netPnl);
+            }
+
+            function formatPnl(element, value) {
+                element.textContent = `${value.toFixed(2)} USDT`;
+                element.className = value > 0 ? 'stats-value pnl-positive' : (value < 0 ? 'stats-value pnl-negative' : 'stats-value');
+            }
+        });
+    </script>
 </body>
 </html>
