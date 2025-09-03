@@ -1,628 +1,150 @@
-// Multi-Coin Trading Bot - Clean JavaScript
-// Firebase configuration will be fetched from backend
+document.addEventListener('DOMContentLoaded', () => {
+    // ÇOK ÖNEMLİ: BU BİLGİLERİ KENDİ FIREBASE PROJENİZDEN ALIP DOLDURUN
+    const firebaseConfig = {
+        apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
+        authDomain: "aviator-90c8b.firebaseapp.com",
+        databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
+        projectId: "aviator-90c8b",
+        storageBucket: "aviator-90c8b.appspot.com",
+        messagingSenderId: "823763988442",
+        appId: "1:823763988442:web:16a797275675a219c3dae3"
+    };
+    // -----------------------------------------------------------------
 
-console.log('🚀 Multi-Coin Trading Bot başlatılıyor...');
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const database = firebase.database();
 
-// Global variables
-let auth, database, statusInterval;
+    // HTML elementleri
+    const loginContainer = document.getElementById('login-container');
+    const appContainer = document.getElementById('app-container');
+    const loginButton = document.getElementById('login-button');
+    const logoutButton = document.getElementById('logout-button');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginError = document.getElementById('login-error');
+    const symbolInput = document.getElementById('symbol-input');
+    const startButton = document.getElementById('start-button');
+    const stopButton = document.getElementById('stop-button');
+    const statusMessageSpan = document.getElementById('status-message');
+    const currentSymbolSpan = document.getElementById('current-symbol');
+    const positionStatusSpan = document.getElementById('position-status');
+    const lastSignalSpan = document.getElementById('last-signal');
+    const statsTotal = document.getElementById('stats-total-trades');
+    const statsWinning = document.getElementById('stats-winning-trades');
+    const statsLosing = document.getElementById('stats-losing-trades');
+    const statsTotalProfit = document.getElementById('stats-total-profit');
+    const statsTotalLoss = document.getElementById('stats-total-loss');
+    const statsNetPnl = document.getElementById('stats-net-pnl');
+    let statusInterval;
 
-// DOM Elements
-const elements = {
-    // Login elements
-    loginScreen: document.getElementById('login-screen'),
-    appLayout: document.getElementById('app-layout'),
-    loginForm: document.getElementById('login-form'),
-    loginBtn: document.getElementById('login-btn'),
-    loginText: document.getElementById('login-text'),
-    loginLoading: document.getElementById('login-loading'),
-    loginError: document.getElementById('login-error'),
-    emailInput: document.getElementById('email'),
-    passwordInput: document.getElementById('password'),
-    createTestUserBtn: document.getElementById('create-test-user-btn'),
-    testConnectionBtn: document.getElementById('test-connection-btn'),
-    
-    // Header elements
-    logoutBtn: document.getElementById('logout-btn'),
-    userEmail: document.getElementById('user-email'),
-    
-    // Bot control elements
-    startMonitoringBtn: document.getElementById('start-monitoring-btn'),
-    stopAllBtn: document.getElementById('stop-all-btn'),
-    addCoinBtn: document.getElementById('add-coin-btn'),
-    symbolInput: document.getElementById('symbol-input'),
-    orderSizeInput: document.getElementById('order-size-input'),
-    
-    // Status elements
-    botStatus: document.getElementById('bot-status'),
-    totalBalance: document.getElementById('total-balance'),
-    activeCoinsCount: document.getElementById('active-coins-count'),
-    totalPositions: document.getElementById('total-positions'),
-    statusMessage: document.getElementById('status-message'),
-    coinsContainer: document.getElementById('coins-container'),
-    
-    // Stats elements
-    statsTotal: document.getElementById('stats-total-trades'),
-    statsWinning: document.getElementById('stats-winning-trades'),
-    statsLosing: document.getElementById('stats-losing-trades'),
-    statsNetPnl: document.getElementById('stats-net-pnl')
-};
+    // --- KİMLİK DOĞRULAMA ---
+    loginButton.addEventListener('click', () => {
+        loginError.textContent = "";
+        auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+            .catch(error => { loginError.textContent = "Hatalı e-posta veya şifre."; });
+    });
 
-// Initialize Firebase from backend config
-async function initializeFirebase() {
-    try {
-        console.log('Firebase konfigürasyonu alınıyor...');
-        
-        let firebaseConfig;
-        
-        try {
-            // Firebase config'i backend'den al
-            const response = await fetch('/api/firebase-config');
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            firebaseConfig = await response.json();
-            console.log('✅ Firebase config backend\'den alındı');
-            
-        } catch (backendError) {
-            console.warn('⚠️ Backend\'den config alınamadı, fallback kullanılıyor:', backendError.message);
-            
-            // Fallback config (geçici çözüm)
-            firebaseConfig = {
-                apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
-                authDomain: "aviator-90c8b.firebaseapp.com",
-                databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
-                projectId: "aviator-90c8b",
-                storageBucket: "aviator-90c8b.appspot.com",
-                messagingSenderId: "823763988442",
-                appId: "1:823763988442:web:16a797275675a219c3dae3"
-            };
-            console.log('🔄 Fallback Firebase config kullanılıyor');
-        }
-        
-        // Firebase'i başlat
-        firebase.initializeApp(firebaseConfig);
-        auth = firebase.auth();
-        database = firebase.database();
-        
-        console.log('✅ Firebase başarıyla başlatıldı');
-        
-        // Auth state listener'ı ekle
-        setupAuthListener();
-        
-        // Event listener'ları ekle
-        setupEventListeners();
-        
-        return true;
-    } catch (error) {
-        console.error('❌ Firebase başlatma hatası:', error);
-        showError('Firebase bağlantısı kurulamadı. Sayfa yenileyin.');
-        return false;
-    }
-}
+    logoutButton.addEventListener('click', () => { auth.signOut(); });
 
-// Authentication state listener
-function setupAuthListener() {
     auth.onAuthStateChanged(user => {
-        console.log('🔐 Auth durumu değişti:', user ? user.email : 'Kullanıcı yok');
-        
         if (user) {
-            showApp(user);
+            loginContainer.style.display = 'none';
+            appContainer.style.display = 'flex';
+            getStatus();
+            statusInterval = setInterval(getStatus, 8000); // Durum sorgulama aralığı
+            listenForTradeUpdates();
         } else {
-            showLogin();
+            loginContainer.style.display = 'flex';
+            appContainer.style.display = 'none';
+            if (statusInterval) clearInterval(statusInterval);
         }
     });
-}
 
-// Show app interface
-function showApp(user) {
-    hideElement(elements.loginScreen);
-    showElement(elements.appLayout);
-    
-    if (elements.userEmail) {
-        elements.userEmail.textContent = user.email;
-    }
-    
-    // Start status polling
-    getStatus();
-    statusInterval = setInterval(getStatus, 3000);
-    
-    // Listen for Firebase trade updates
-    listenForTradeUpdates();
-}
-
-// Show login interface
-function showLogin() {
-    showElement(elements.loginScreen);
-    hideElement(elements.appLayout);
-    setLoading(false);
-    hideError();
-    
-    if (statusInterval) {
-        clearInterval(statusInterval);
-    }
-}
-
-// Setup all event listeners
-function setupEventListeners() {
-    // Login form
-    if (elements.loginForm) {
-        elements.loginForm.addEventListener('submit', handleLogin);
-    }
-    
-    // Logout button
-    if (elements.logoutBtn) {
-        elements.logoutBtn.addEventListener('click', function() {
-            auth.signOut();
-        });
-    }
-    
-    // Test buttons
-    if (elements.createTestUserBtn) {
-        elements.createTestUserBtn.addEventListener('click', createTestUser);
-    }
-    
-    if (elements.testConnectionBtn) {
-        elements.testConnectionBtn.addEventListener('click', testFirebaseConnection);
-    }
-    
-    // Bot control buttons
-    if (elements.startMonitoringBtn) {
-        elements.startMonitoringBtn.addEventListener('click', startMonitoring);
-    }
-    
-    if (elements.stopAllBtn) {
-        elements.stopAllBtn.addEventListener('click', stopAll);
-    }
-    
-    if (elements.addCoinBtn) {
-        elements.addCoinBtn.addEventListener('click', addCoin);
-    }
-    
-    // Symbol input auto-uppercase and enter key
-    if (elements.symbolInput) {
-        elements.symbolInput.addEventListener('input', function(e) {
-            e.target.value = e.target.value.toUpperCase();
-        });
-        
-        elements.symbolInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                if (elements.addCoinBtn) elements.addCoinBtn.click();
-            }
-        });
-    }
-}
-
-// Handle login form submission
-async function handleLogin(e) {
-    e.preventDefault();
-    
-    const email = elements.emailInput ? elements.emailInput.value.trim() : '';
-    const password = elements.passwordInput ? elements.passwordInput.value.trim() : '';
-    
-    console.log('Giriş denemesi:', { email: email, password: password ? '***' : 'boş' });
-    
-    if (!email || !password) {
-        showError('E-posta ve şifre alanları boş olamaz!');
-        return;
-    }
-
-    setLoading(true);
-    hideError();
-
-    try {
-        console.log('Firebase giriş deneniyor...');
-        const userCredential = await auth.signInWithEmailAndPassword(email, password);
-        console.log('✅ Giriş başarılı:', userCredential.user.email);
-    } catch (error) {
-        console.error('❌ Giriş hatası:', error);
-        
-        let errorMessage = 'Giriş yapılırken bir hata oluştu!';
-        
-        switch (error.code) {
-            case 'auth/user-not-found':
-                errorMessage = 'Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı!';
-                break;
-            case 'auth/wrong-password':
-                errorMessage = 'Şifre yanlış!';
-                break;
-            case 'auth/invalid-email':
-                errorMessage = 'Geçersiz e-posta formatı!';
-                break;
-            case 'auth/invalid-credential':
-                errorMessage = 'E-posta veya şifre hatalı!';
-                break;
-            case 'auth/too-many-requests':
-                errorMessage = 'Çok fazla başarısız deneme. Lütfen daha sonra tekrar deneyin.';
-                break;
-            default:
-                errorMessage = 'Hata: ' + error.message;
-        }
-        
-        showError(errorMessage);
-        setLoading(false);
-    }
-}
-
-// Create test user
-async function createTestUser() {
-    try {
-        const email = "test@example.com";
-        const password = "test123456";
-        
-        console.log('Test kullanıcısı oluşturuluyor...');
-        const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-        console.log('✅ Test kullanıcı oluşturuldu:', userCredential.user.email);
-        alert('✅ Test kullanıcısı oluşturuldu!\nE-posta: ' + email + '\nŞifre: ' + password);
-    } catch (error) {
-        console.error('❌ Test kullanıcı hatası:', error);
-        
-        if (error.code === 'auth/email-already-in-use') {
-            alert('ℹ️ Test kullanıcısı zaten mevcut!\nE-posta: test@example.com\nŞifre: test123456');
-        } else {
-            alert('❌ Test kullanıcısı oluşturulamadı: ' + error.message);
-        }
-    }
-}
-
-// Test Firebase connection
-async function testFirebaseConnection() {
-    try {
-        console.log('Firebase bağlantısı test ediliyor...');
-        
-        // Auth test
-        const currentUser = auth.currentUser;
-        console.log('Mevcut kullanıcı:', currentUser ? currentUser.email : 'Yok');
-        
-        // Database test
-        const testRef = database.ref('test');
-        await testRef.set({ timestamp: Date.now(), message: 'Test bağlantısı' });
-        console.log('✅ Database yazma testi başarılı');
-        
-        const snapshot = await testRef.once('value');
-        console.log('✅ Database okuma testi başarılı:', snapshot.val());
-        
-        alert('✅ Firebase bağlantısı başarılı!');
-        
-    } catch (error) {
-        console.error('❌ Firebase bağlantı testi başarısız:', error);
-        alert('❌ Firebase bağlantı testi başarısız: ' + error.message);
-    }
-}
-
-// Bot control functions
-async function startMonitoring() {
-    console.log('Bot başlatılıyor...');
-    const result = await fetchApi('/api/start-monitoring', { method: 'POST' });
-    if (result) {
-        updateStatusMessage('✅ Bot monitoring başlatıldı!', 'success');
-        updateUI(result.status);
-    }
-}
-
-async function stopAll() {
-    if (!confirm('Tüm işlemleri durdurmak istediğinizden emin misiniz?')) return;
-    
-    console.log('Bot durduruluyor...');
-    const result = await fetchApi('/api/stop-all', { method: 'POST' });
-    if (result) {
-        updateStatusMessage('✅ Tüm işlemler durduruldu!', 'success');
-        updateUI(result.status);
-    }
-}
-
-async function addCoin() {
-    const symbol = elements.symbolInput ? elements.symbolInput.value.trim().toUpperCase() : '';
-    const orderSize = elements.orderSizeInput ? parseFloat(elements.orderSizeInput.value) : 0;
-
-    if (!symbol) {
-        updateStatusMessage('❌ Coin sembolü boş olamaz!', 'danger');
-        return;
-    }
-
-    if (!orderSize || orderSize < 10) {
-        updateStatusMessage('❌ İşlem boyutu minimum 10 USDT olmalı!', 'danger');
-        return;
-    }
-
-    console.log('Coin ekleniyor:', symbol, orderSize);
-    const result = await fetchApi('/api/add-coin', {
-        method: 'POST',
-        body: JSON.stringify({
-            symbol: symbol,
-            order_size_usdt: orderSize
-        })
-    });
-
-    if (result) {
-        updateStatusMessage('✅ ' + symbol + ' başarıyla eklendi!', 'success');
-        if (elements.symbolInput) elements.symbolInput.value = '';
-        if (elements.orderSizeInput) elements.orderSizeInput.value = '50';
-        updateUI(result.status);
-    }
-}
-
-// Remove coin function (globally accessible)
-window.removeCoin = async function(symbol) {
-    if (!confirm(symbol + ' coin\'ini kaldırmak istediğinizden emin misiniz?\nAçık pozisyon varsa kapatılacaktır!')) {
-        return;
-    }
-
-    console.log('Coin kaldırılıyor:', symbol);
-    const result = await fetchApi('/api/remove-coin', {
-        method: 'POST',
-        body: JSON.stringify({ symbol: symbol })
-    });
-
-    if (result) {
-        updateStatusMessage('✅ ' + symbol + ' başarıyla kaldırıldı!', 'success');
-        updateUI(result.status);
-    }
-};
-
-// API request function
-async function fetchApi(endpoint, options) {
-    const user = auth ? auth.currentUser : null;
-    if (!user) {
-        console.warn('Kullanıcı giriş yapmamış');
-        return null;
-    }
-
-    try {
+    // --- API İSTEKLERİ ---
+    async function fetchApi(endpoint, options = {}) {
+        const user = auth.currentUser;
+        if (!user) { return null; }
         const idToken = await user.getIdToken(true);
-        const headers = {
-            'Authorization': 'Bearer ' + idToken,
-            'Content-Type': 'application/json'
-        };
-
-        if (options && options.headers) {
-            Object.assign(headers, options.headers);
-        }
-
-        const fetchOptions = {
-            method: options && options.method ? options.method : 'GET',
-            headers: headers
-        };
-
-        if (options && options.body) {
-            fetchOptions.body = options.body;
-        }
-
-        const response = await fetch(endpoint, fetchOptions);
-
-        if (!response.ok) {
-            let errorData;
-            try {
-                errorData = await response.json();
-            } catch (e) {
-                errorData = { detail: response.statusText };
+        const headers = { ...options.headers, 'Authorization': `Bearer ${idToken}` };
+        if (options.body) headers['Content-Type'] = 'application/json';
+        try {
+            const response = await fetch(endpoint, { ...options, headers });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                console.error("API Hatası:", errorData.detail);
+                // Kullanıcıya hata göstermek için bir mekanizma eklenebilir
+                return null;
             }
-            throw new Error(errorData.detail || 'API Error');
-        }
-
-        return response.json();
-    } catch (error) {
-        console.error('API Hatası:', error);
-        updateStatusMessage('❌ ' + error.message, 'danger');
-        return null;
+            return response.json();
+        } catch (error) { console.error("API isteği hatası:", error); return null; }
     }
-}
-
-// UI update functions
-function updateUI(data) {
-    if (!data) return;
-
-    console.log('UI güncelleniyor:', data);
-
-    // Bot Status
-    if (elements.botStatus) {
+    
+    // --- ARAYÜZ GÜNCELLEME ---
+    const updateUI = (data) => {
+        if (!data) return;
+        statusMessageSpan.textContent = data.status_message;
+        currentSymbolSpan.textContent = data.symbol || 'N/A';
+        lastSignalSpan.textContent = data.last_signal || 'N/A';
         if (data.is_running) {
-            elements.botStatus.innerHTML = '<span class="badge badge-success">🟢 Çalışıyor</span>';
+            startButton.disabled = true; stopButton.disabled = false; symbolInput.disabled = true;
+            symbolInput.value = data.symbol; statusMessageSpan.className = 'status-running';
         } else {
-            elements.botStatus.innerHTML = '<span class="badge badge-danger">🔴 Durdurulmuş</span>';
+            startButton.disabled = false; stopButton.disabled = true; symbolInput.disabled = false;
+            statusMessageSpan.className = 'status-stopped';
         }
-    }
+        positionStatusSpan.textContent = data.in_position ? 'Evet' : 'Hayır';
+        positionStatusSpan.className = data.in_position ? 'status-in-position' : '';
+    };
 
-    // Balance and Counts
-    if (elements.totalBalance) {
-        const balance = data.total_balance || 0;
-        elements.totalBalance.textContent = balance.toFixed(2) + ' USDT';
-    }
-    if (elements.activeCoinsCount) {
-        const coinCount = data.active_coins ? Object.keys(data.active_coins).length : 0;
-        elements.activeCoinsCount.textContent = coinCount;
-    }
-    if (elements.totalPositions) {
-        elements.totalPositions.textContent = data.total_positions || 0;
-    }
+    const getStatus = async () => updateUI(await fetchApi('/api/status'));
+    startButton.addEventListener('click', async () => {
+        const symbol = symbolInput.value.trim().toUpperCase();
+        if (!symbol) return alert('Lütfen bir coin sembolü girin.');
+        updateUI(await fetchApi('/api/start', { method: 'POST', body: JSON.stringify({ symbol }) }));
+    });
+    stopButton.addEventListener('click', async () => updateUI(await fetchApi('/api/stop', { method: 'POST' })));
 
-    // Button States
-    if (elements.startMonitoringBtn) elements.startMonitoringBtn.disabled = data.is_running;
-    if (elements.stopAllBtn) elements.stopAllBtn.disabled = !data.is_running;
-    if (elements.addCoinBtn) elements.addCoinBtn.disabled = !data.is_running;
-
-    // Update Coins Display
-    const coinDetails = data.coin_details || {};
-    updateCoinsDisplay(coinDetails);
-}
-
-function updateCoinsDisplay(coinDetails) {
-    if (!elements.coinsContainer) return;
-
-    if (Object.keys(coinDetails).length === 0) {
-        elements.coinsContainer.innerHTML = '<div class="no-data">Henüz coin eklenmedi</div>';
-        return;
-    }
-
-    let coinsHTML = '';
-    for (const symbol in coinDetails) {
-        const details = coinDetails[symbol];
-        
-        const positionBadge = details.in_position ? 
-            '<span class="badge badge-success">📍 Pozisyonda</span>' : 
-            '<span class="badge badge-info">⏳ Beklemede</span>';
-
-        const pnlClass = (details.pnl || 0) >= 0 ? 'positive' : 'negative';
-        const signalBadge = getSignalBadge(details.last_signal);
-        const orderSize = details.order_size_usdt || 0;
-        const pnl = details.pnl || 0;
-
-        coinsHTML += `
-            <div class="coin-item">
-                <div class="coin-header">
-                    <div class="coin-symbol">${symbol}</div>
-                    <button onclick="removeCoin('${symbol}')" class="btn btn-danger btn-sm">
-                        🗑️ Kaldır
-                    </button>
-                </div>
-                <div class="coin-info">
-                    <div class="info-item">
-                        <div class="info-label">Durum</div>
-                        <div class="info-value">${positionBadge}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Pozisyon Yönü</div>
-                        <div class="info-value">${details.position_side || 'Yok'}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Son Sinyal</div>
-                        <div class="info-value">${signalBadge}</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">İşlem Boyutu</div>
-                        <div class="info-value">${orderSize.toFixed(2)} USDT</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">P&L</div>
-                        <div class="info-value ${pnlClass}">${pnl.toFixed(2)} USDT</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    elements.coinsContainer.innerHTML = coinsHTML;
-}
-
-function getSignalBadge(signal) {
-    switch (signal) {
-        case 'LONG':
-            return '<span class="badge badge-success">📈 LONG</span>';
-        case 'SHORT':
-            return '<span class="badge badge-danger">📉 SHORT</span>';
-        case 'HOLD':
-            return '<span class="badge badge-warning">⏸️ BEKLE</span>';
-        default:
-            return '<span class="badge badge-info">📊 N/A</span>';
-    }
-}
-
-function updateStatusMessage(message, type) {
-    if (elements.statusMessage) {
-        elements.statusMessage.textContent = message;
-        if (elements.statusMessage.parentElement) {
-            elements.statusMessage.parentElement.className = 'alert alert-' + (type || 'info');
-        }
-    }
-    console.log('Status: ' + message);
-}
-
-// Status polling
-async function getStatus() {
-    const data = await fetchApi('/api/status');
-    if (data) updateUI(data);
-}
-
-// Firebase statistics listener
-function listenForTradeUpdates() {
-    try {
+    // --- İSTATİSTİK HESAPLAMA ---
+    function listenForTradeUpdates() {
         const tradesRef = database.ref('trades');
-        tradesRef.on('value', function(snapshot) {
+        tradesRef.on('value', (snapshot) => {
             const trades = snapshot.val() ? Object.values(snapshot.val()) : [];
             calculateAndDisplayStats(trades);
         });
-    } catch (error) {
-        console.error('Firebase dinleme hatası:', error);
     }
-}
 
-function calculateAndDisplayStats(trades) {
-    let totalTrades = 0;
-    let winningTrades = 0;
-    let losingTrades = 0;
-    let totalProfit = 0;
-    let totalLoss = 0;
+    function calculateAndDisplayStats(trades) {
+        let totalTrades = trades.length;
+        let winningTrades = 0, losingTrades = 0;
+        let totalProfit = 0, totalLoss = 0;
 
-    trades.forEach(function(trade) {
-        if (trade.status && trade.status !== "OPEN") {
-            totalTrades++;
+        trades.forEach(trade => {
             const pnl = parseFloat(trade.pnl) || 0;
-            
             if (pnl > 0) {
                 winningTrades++;
                 totalProfit += pnl;
-            } else if (pnl < 0) {
+            } else {
                 losingTrades++;
-                totalLoss += Math.abs(pnl);
+                totalLoss += pnl;
             }
-        }
-    });
+        });
+        
+        const netPnl = totalProfit + totalLoss;
 
-    const netPnl = totalProfit - totalLoss;
-    const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
+        statsTotal.textContent = totalTrades;
+        const winRate = totalTrades > 0 ? ((winningTrades / totalTrades) * 100).toFixed(1) : 0;
+        const loseRate = totalTrades > 0 ? ((losingTrades / totalTrades) * 100).toFixed(1) : 0;
+        statsWinning.textContent = `${winningTrades} (%${winRate})`;
+        statsLosing.textContent = `${losingTrades} (%${loseRate})`;
 
-    // Update Stats
-    if (elements.statsTotal) elements.statsTotal.textContent = totalTrades;
-    if (elements.statsWinning) {
-        elements.statsWinning.textContent = winningTrades + ' (' + winRate + '%)';
+        formatPnl(statsTotalProfit, totalProfit);
+        formatPnl(statsTotalLoss, totalLoss);
+        formatPnl(statsNetPnl, netPnl);
     }
-    if (elements.statsLosing) {
-        const loseRate = (100 - winRate).toFixed(1);
-        elements.statsLosing.textContent = losingTrades + ' (' + loseRate + '%)';
+
+    function formatPnl(element, value) {
+        element.textContent = `${value.toFixed(2)} USDT`;
+        element.className = value > 0 ? 'stats-value pnl-positive' : (value < 0 ? 'stats-value pnl-negative' : 'stats-value');
     }
-    
-    // Format Net P&L
-    if (elements.statsNetPnl) {
-        elements.statsNetPnl.textContent = netPnl.toFixed(2);
-        elements.statsNetPnl.className = 'stat-value ' + (netPnl >= 0 ? 'positive' : 'negative');
-    }
-}
-
-// Utility functions
-function showElement(element) {
-    if (element) element.classList.remove('hidden');
-}
-
-function hideElement(element) {
-    if (element) element.classList.add('hidden');
-}
-
-function showError(message) {
-    if (elements.loginError) {
-        elements.loginError.textContent = message;
-        showElement(elements.loginError);
-    }
-}
-
-function hideError() {
-    hideElement(elements.loginError);
-}
-
-function setLoading(loading) {
-    if (loading) {
-        if (elements.loginBtn) elements.loginBtn.disabled = true;
-        hideElement(elements.loginText);
-        showElement(elements.loginLoading);
-    } else {
-        if (elements.loginBtn) elements.loginBtn.disabled = false;
-        showElement(elements.loginText);
-        hideElement(elements.loginLoading);
-    }
-}
-
-// Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🚀 DOM yüklendi, Firebase başlatılıyor...');
-    await initializeFirebase();
 });
