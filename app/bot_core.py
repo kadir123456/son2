@@ -72,8 +72,14 @@ class BotCore:
             print(f"--> Pozisyon SL ile kapandı. Yeni sinyal bekleniyor.")
             pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
             firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_SL", "timestamp": datetime.now(timezone.utc)})
+            
+            # SL oldugunda işlem miktarını düşür
+            if pnl < 0:
+                settings.ORDER_SIZE_USDT = max(40.0, settings.ORDER_SIZE_USDT + pnl * settings.COMPOUND_RATIO)
+                print(f"SL sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
+                
             self.status["position_side"] = None
-        
+
         # Yeni sinyali al
         signal = trading_strategy.analyze_klines(self.klines)
         print(f"Strateji analizi sonucu: {signal}")
@@ -98,6 +104,12 @@ class BotCore:
             print(f"--> Ters sinyal geldi. Mevcut {self.status['position_side']} pozisyonu kapatılıyor...")
             pnl = await binance_client.get_last_trade_pnl(symbol)
             firebase_manager.log_trade({"symbol": symbol, "pnl": pnl, "status": "CLOSED_BY_FLIP", "timestamp": datetime.now(timezone.utc)})
+
+            # İşlem PnL'sine göre bir sonraki işlem miktarını ayarla
+            if pnl > 0:
+                settings.ORDER_SIZE_USDT += pnl * settings.COMPOUND_RATIO
+                print(f"Kâr alım sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
+            
             await binance_client.close_position(symbol, position_amt, side_to_close)
             await asyncio.sleep(1) # Pozisyonun kapandığından emin ol
 
@@ -126,6 +138,11 @@ class BotCore:
         open_positions = await binance_client.get_open_positions(self.status["symbol"])
         
         if not open_positions:
+            # Pozisyon SL ile kapandıysa, PnL'i kontrol et ve işlem miktarını düşür.
+            last_pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
+            if last_pnl < 0:
+                settings.ORDER_SIZE_USDT = max(40.0, settings.ORDER_SIZE_USDT + last_pnl * settings.COMPOUND_RATIO)
+                print(f"SL sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
             return
             
         position = open_positions[0]
@@ -137,6 +154,12 @@ class BotCore:
             print(f"--> Kâr hedefine ulaşıldı! LONG pozisyon kapatılıyor.")
             pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
             firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_TP", "timestamp": datetime.now(timezone.utc)})
+
+            # İşlem PnL'sine göre bir sonraki işlem miktarını ayarla
+            if pnl > 0:
+                settings.ORDER_SIZE_USDT += pnl * settings.COMPOUND_RATIO
+                print(f"TP sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
+
             await binance_client.close_position(self.status["symbol"], position_amt, 'SELL')
             self.status["position_side"] = None
 
@@ -145,6 +168,12 @@ class BotCore:
             print(f"--> Kâr hedefine ulaşıldı! SHORT pozisyon kapatılıyor.")
             pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
             firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_TP", "timestamp": datetime.now(timezone.utc)})
+
+            # İşlem PnL'sine göre bir sonraki işlem miktarını ayarla
+            if pnl > 0:
+                settings.ORDER_SIZE_USDT += pnl * settings.COMPOUND_RATIO
+                print(f"TP sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
+                
             await binance_client.close_position(self.status["symbol"], position_amt, 'BUY')
             self.status["position_side"] = None
 
