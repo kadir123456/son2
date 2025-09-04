@@ -36,6 +36,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const statsTotalProfit = document.getElementById('stats-total-profit');
     const statsTotalLoss = document.getElementById('stats-total-loss');
     const statsNetPnl = document.getElementById('stats-net-pnl');
+    
+    // Yeni eklenen HTML elementleri
+    const statsMainBalance = document.getElementById('stats-main-balance');
+    const statsPositionPnl = document.getElementById('stats-position-pnl');
+    const statsOrderSize = document.getElementById('stats-order-size');
     let statusInterval;
 
     // --- KİMLİK DOĞRULAMA ---
@@ -93,8 +98,31 @@ document.addEventListener('DOMContentLoaded', () => {
             startButton.disabled = false; stopButton.disabled = true; symbolInput.disabled = false;
             statusMessageSpan.className = 'status-stopped';
         }
-        positionStatusSpan.textContent = data.in_position ? 'Evet' : 'Hayır';
-        positionStatusSpan.className = data.in_position ? 'status-in-position' : '';
+        positionStatusSpan.textContent = data.position_side ? 'Evet' : 'Hayır';
+        positionStatusSpan.className = data.position_side ? 'status-in-position' : '';
+        
+        // Yeni eklenen alanlar için veri güncelleme
+        if (data.is_running && data.account_balance !== undefined) {
+            formatPnl(statsMainBalance, data.account_balance, true);
+        } else {
+            statsMainBalance.textContent = 'N/A';
+            statsMainBalance.className = 'stats-value';
+        }
+
+        if (data.is_running && data.position_pnl !== undefined) {
+            formatPnl(statsPositionPnl, data.position_pnl);
+        } else {
+            statsPositionPnl.textContent = 'N/A';
+            statsPositionPnl.className = 'stats-value';
+        }
+
+        if (data.is_running && data.order_size !== undefined) {
+            statsOrderSize.textContent = `${data.order_size.toFixed(2)} USDT`;
+            statsOrderSize.className = 'stats-value';
+        } else {
+            statsOrderSize.textContent = 'N/A';
+            statsOrderSize.className = 'stats-value';
+        }
     };
 
     const getStatus = async () => updateUI(await fetchApi('/api/status'));
@@ -143,8 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
         formatPnl(statsNetPnl, netPnl);
     }
 
-    function formatPnl(element, value) {
+    function formatPnl(element, value, isBalance = false) {
         element.textContent = `${value.toFixed(2)} USDT`;
-        element.className = value > 0 ? 'stats-value pnl-positive' : (value < 0 ? 'stats-value pnl-negative' : 'stats-value');
+        if (isBalance) {
+            element.className = 'stats-value';
+        } else {
+            element.className = value > 0 ? 'stats-value pnl-positive' : (value < 0 ? 'stats-value pnl-negative' : 'stats-value');
+        }
     }
 });
