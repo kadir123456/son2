@@ -35,8 +35,34 @@
         </header>
 
         <main>
+            <div class="card status-card">
+                <h2>Cüzdan Durumu</h2>
+                <div class="stats-grid">
+                    <p class="stats-label">Ana Bakiye (USDT):</p>
+                    <p class="stats-value" id="stats-main-balance">Yükleniyor...</p>
+                    <p class="stats-label">İşlemdeki Pozisyon P&L:</p>
+                    <p class="stats-value" id="stats-position-pnl">Yükleniyor...</p>
+                    <p class="stats-label">İşlemdeki Miktar (USDT):</p>
+                    <p class="stats-value" id="stats-order-size">Yükleniyor...</p>
+                </div>
+            </div>
+
+            <div class="card status-card">
+                <h2>Anlık Bot Durumu</h2>
+                <div class="status-grid">
+                    <p class="status-label">Mesaj:</p>
+                    <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
+                    <p class="status-label">İzlenen Sembol:</p>
+                    <p class="status-value"><span id="current-symbol">N/A</span></p>
+                    <p class="status-label">Pozisyon Durumu:</p>
+                    <p class="status-value"><span id="position-status">Hayır</span></p>
+                    <p class="status-label">Son Sinyal:</p>
+                    <p class="status-value"><span id="last-signal">N/A</span></p>
+                </div>
+            </div>
+
             <div class="card controls-card">
-                <h2>kısa vadeli Yönetimi</h2>
+                <h2>Bot Yönetimi</h2>
                 <div class="form-group">
                     <label for="symbol-input">İşlem Yapılacak Coin</label>
                     <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT">
@@ -47,20 +73,6 @@
                 </div>
             </div>
 
-            <div class="card status-card">
-                <h2>Anlık Durum</h2>
-                <div class="status-grid">
-                    <p class="status-label">Mesaj:</p>
-                    <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
-                    <p class="status-label">İzlenen Sembol:</p>
-                    <p class="status-value"><span id="current-symbol">N/A</span></p>
-                    <p class="status-label">Pozisyonda mı?:</p>
-                    <p class="status-value"><span id="position-status">Hayır</span></p>
-                    <p class="status-label">Son Sinyal:</p>
-                    <p class="status-value"><span id="last-signal">N/A</span></p>
-                </div>
-            </div>
-            
             <div class="card stats-card">
                 <h2>Performans İstatistikleri</h2>
                 <div class="stats-grid">
