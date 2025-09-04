@@ -55,10 +55,16 @@ class BotCore:
             
     async def _handle_websocket_message(self, message: str):
         data = json.loads(message)
-        if not data.get('k', {}).get('x', False): return
+        kline_data = data.get('k', {})
+        
+        # Sadece kapanan mumları işle
+        if not kline_data.get('x', False):
+            # Açık mumda kâr/zarar kontrolü yap
+            await self._check_profit_and_close(kline_data.get('c'))
+            return
             
-        print(f"Yeni mum kapandı: {self.status['symbol']} ({settings.TIMEFRAME}) - Kapanış: {data['k']['c']}")
-        self.klines.pop(0); self.klines.append([data['k'][key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']] + ['0'])
+        print(f"Yeni mum kapandı: {self.status['symbol']} ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
+        self.klines.pop(0); self.klines.append([kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']] + ['0'])
         
         # Her mumda pozisyonu kontrol et ve SL olup olmadığını anla
         open_positions = await binance_client.get_open_positions(self.status["symbol"])
@@ -67,7 +73,7 @@ class BotCore:
             pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
             firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_SL", "timestamp": datetime.now(timezone.utc)})
             self.status["position_side"] = None
-
+        
         # Yeni sinyali al
         signal = trading_strategy.analyze_klines(self.klines)
         print(f"Strateji analizi sonucu: {signal}")
@@ -111,5 +117,35 @@ class BotCore:
             self.status["position_side"] = None
             self.status["status_message"] = "Yeni pozisyon açılamadı."
         print(self.status["status_message"])
+        
+    async def _check_profit_and_close(self, current_price_str):
+        if self.status.get("position_side") is None:
+            return
+        
+        current_price = float(current_price_str)
+        open_positions = await binance_client.get_open_positions(self.status["symbol"])
+        
+        if not open_positions:
+            return
+            
+        position = open_positions[0]
+        entry_price = float(position['entryPrice'])
+        position_amt = float(position['positionAmt'])
+        
+        # Long pozisyon için kâr kontrolü
+        if position_amt > 0 and (current_price - entry_price) / entry_price >= settings.TAKE_PROFIT_PERCENT:
+            print(f"--> Kâr hedefine ulaşıldı! LONG pozisyon kapatılıyor.")
+            pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
+            firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_TP", "timestamp": datetime.now(timezone.utc)})
+            await binance_client.close_position(self.status["symbol"], position_amt, 'SELL')
+            self.status["position_side"] = None
+
+        # Short pozisyon için kâr kontrolü
+        elif position_amt < 0 and (entry_price - current_price) / entry_price >= settings.TAKE_PROFIT_PERCENT:
+            print(f"--> Kâr hedefine ulaşıldı! SHORT pozisyon kapatılıyor.")
+            pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
+            firebase_manager.log_trade({"symbol": self.status["symbol"], "pnl": pnl, "status": "CLOSED_BY_TP", "timestamp": datetime.now(timezone.utc)})
+            await binance_client.close_position(self.status["symbol"], position_amt, 'BUY')
+            self.status["position_side"] = None
 
 bot_core = BotCore()
