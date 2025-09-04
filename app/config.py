@@ -18,9 +18,9 @@ class Settings:
     ORDER_SIZE_USDT: float = 40.0
     TIMEFRAME: str = "15m"
     
-    # --- Kâr/Zarar Ayarları (Sadece Stop Loss) ---
-    # Bu stratejide kâr, bir sonraki ters sinyalde alınır.
-    # Bu SL, sadece ani ve büyük ters hareketlere karşı bir sigortadır.
-    STOP_LOSS_PERCENT: float = 0.02  # %1 Zarar Durdur
+    # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
+    STOP_LOSS_PERCENT: float = 0.02  # %2 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.02 # %2 Kar Al
+    COMPOUND_RATIO: float = 0.5 # Elde edilen karin %50'si bir sonraki islem miktarini artirmak icin kullanilir
 
 settings = Settings()
