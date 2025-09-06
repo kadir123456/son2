@@ -48,50 +48,91 @@ class BotCore:
         })
         print(self.status["status_message"])
         
-        await binance_client.initialize()
-        
-        # Hesap bakiyesini güncelle
-        self.status["account_balance"] = await binance_client.get_account_balance()
-        
-        symbol_info = await binance_client.get_symbol_info(symbol)
-        if not symbol_info:
-            self.status["status_message"] = f"{symbol} için borsa bilgileri alınamadı."
-            await self.stop()
-            return
-            
-        self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
-        self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
-        print(f"{symbol} için Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
-        
-        # Kaldıraç ayarlama (güncellenmiş versiyon)
-        if not await binance_client.set_leverage(symbol, settings.LEVERAGE):
-            self.status["status_message"] = "Kaldıraç ayarlanamadı. Açık pozisyonları kontrol edin."
-            await self.stop()
-            return
-            
-        self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
-        if not self.klines:
-            self.status["status_message"] = "Geçmiş veri alınamadı."
-            await self.stop()
-            return
-            
-        self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor..."
-        
-        ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
         try:
+            # Binance bağlantısı
+            print("1. Binance bağlantısı kuruluyor...")
+            await binance_client.initialize()
+            print("✅ Binance bağlantısı başarılı")
+            
+            # Hesap bakiyesi kontrolü
+            print("2. Hesap bakiyesi kontrol ediliyor...")
+            self.status["account_balance"] = await binance_client.get_account_balance()
+            print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
+            
+            # Symbol bilgileri
+            print(f"3. {symbol} sembol bilgileri alınıyor...")
+            symbol_info = await binance_client.get_symbol_info(symbol)
+            if not symbol_info:
+                error_msg = f"❌ {symbol} için borsa bilgileri alınamadı. Sembol doğru mu?"
+                print(error_msg)
+                self.status["status_message"] = error_msg
+                await self.stop()
+                return
+            print(f"✅ {symbol} sembol bilgileri alındı")
+                
+            # Precision hesaplama
+            print("4. Hassasiyet bilgileri hesaplanıyor...")
+            self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
+            self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
+            print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
+            
+            # Açık pozisyon kontrolü
+            print("5. Açık pozisyonlar kontrol ediliyor...")
+            open_positions = await binance_client.get_open_positions(symbol)
+            if open_positions:
+                position = open_positions[0]
+                position_amt = float(position['positionAmt'])
+                if position_amt > 0:
+                    self.status["position_side"] = "LONG"
+                elif position_amt < 0:
+                    self.status["position_side"] = "SHORT"
+                print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
+                print("Mevcut kaldıraçla devam ediliyor...")
+            else:
+                print(f"✅ {symbol} için açık pozisyon yok")
+                # Kaldıraç ayarlama
+                print("6. Kaldıraç ayarlanıyor...")
+                if await binance_client.set_leverage(symbol, settings.LEVERAGE):
+                    print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
+                else:
+                    print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
+                
+            # Geçmiş veri çekme
+            print("7. Geçmiş mum verileri çekiliyor...")
+            self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+            if not self.klines:
+                error_msg = f"❌ {symbol} için geçmiş veri alınamadı"
+                print(error_msg)
+                self.status["status_message"] = error_msg
+                await self.stop()
+                return
+            print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
+                
+            # WebSocket bağlantısı
+            print("8. WebSocket bağlantısı kuruluyor...")
+            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor..."
+            print(f"✅ {self.status['status_message']}")
+            
+            ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
+            print(f"WebSocket URL: {ws_url}")
+            
             async with websockets.connect(ws_url, ping_interval=30, ping_timeout=15) as ws:
-                print(f"WebSocket bağlantısı kuruldu: {ws_url}")
+                print(f"✅ WebSocket bağlantısı kuruldu")
                 while not self._stop_requested:
                     try:
                         message = await asyncio.wait_for(ws.recv(), timeout=60.0)
                         await self._handle_websocket_message(message)
-                    except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
-                        print("Piyasa veri akışı bağlantı sorunu...")
+                    except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed) as e:
+                        print(f"WebSocket bağlantı sorunu: {e}")
                         await asyncio.sleep(5)
                         break
+                        
         except Exception as e:
-            print(f"WebSocket bağlantı hatası: {e}")
-            
+            error_msg = f"❌ Bot başlatılırken beklenmeyen hata: {e}"
+            print(error_msg)
+            self.status["status_message"] = error_msg
+        
+        print("Bot durduruluyor...")
         await self.stop()
 
     async def stop(self):
@@ -115,7 +156,6 @@ class BotCore:
         
         # Sadece kapanan mumları işle
         if not kline_data.get('x', False):
-            # Açık mumda kâr/zarar kontrolü yap (güncellenmiş SL/TP mantığı kaldırıldı)
             return
             
         print(f"Yeni mum kapandı: {self.status['symbol']} ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
@@ -124,7 +164,7 @@ class BotCore:
             kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
         ] + ['0'])
         
-        # Her mumda pozisyonu kontrol et ve SL/TP olup olmadığını anla
+        # Pozisyon kontrolü
         open_positions = await binance_client.get_open_positions(self.status["symbol"])
         if self.status["position_side"] is not None and not open_positions:
             print(f"--> Pozisyon SL/TP ile kapandı. Yeni sinyal bekleniyor.")
@@ -147,27 +187,22 @@ class BotCore:
             self.status["position_side"] = None
             self.status["order_size"] = settings.ORDER_SIZE_USDT
 
-        # Yeni sinyali al
+        # Sinyal analizi
         signal = trading_strategy.analyze_klines(self.klines)
         print(f"Strateji analizi sonucu: {signal}")
 
-        # Eğer sinyal varsa ve mevcut pozisyonla aynı değilse, pozisyonu döndür
+        # Pozisyon yönetimi
         if signal != "HOLD" and signal != self.status.get("position_side"):
             await self._flip_position(signal)
 
     async def _update_status_info(self):
         """Durum bilgilerini günceller"""
         if self.status["is_running"]:
-            # Hesap bakiyesini güncelle
             self.status["account_balance"] = await binance_client.get_account_balance()
-            
-            # Pozisyon PnL'ini güncelle
             if self.status["position_side"]:
                 self.status["position_pnl"] = await binance_client.get_position_pnl(self.status["symbol"])
             else:
                 self.status["position_pnl"] = 0.0
-                
-            # Güncel işlem miktarını güncelle
             self.status["order_size"] = settings.ORDER_SIZE_USDT
 
     def _format_quantity(self, quantity: float):
@@ -179,7 +214,7 @@ class BotCore:
     async def _flip_position(self, new_signal: str):
         symbol = self.status["symbol"]
         
-        # 1. Adım: Mevcut bir pozisyon varsa kapat
+        # Mevcut pozisyonu kapat
         open_positions = await binance_client.get_open_positions(symbol)
         if open_positions:
             position = open_positions[0]
@@ -195,7 +230,6 @@ class BotCore:
                 "timestamp": datetime.now(timezone.utc)
             })
 
-            # İşlem PnL'sine göre bir sonraki işlem miktarını ayarla
             if pnl > 0:
                 settings.ORDER_SIZE_USDT += pnl * settings.COMPOUND_RATIO
                 print(f"Kâr alım sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
@@ -204,22 +238,21 @@ class BotCore:
                 print(f"Zarar sonrası yeni işlem miktarı: {settings.ORDER_SIZE_USDT:.2f} USDT")
             
             await binance_client.close_position(symbol, position_amt, side_to_close)
-            await asyncio.sleep(1)  # Pozisyonun kapandığından emin ol
+            await asyncio.sleep(1)
 
-        # 2. Adım: Yeni pozisyonu aç
+        # Yeni pozisyon aç
         print(f"--> Yeni {new_signal} pozisyonu açılıyor...")
         side = "BUY" if new_signal == "LONG" else "SELL"
         price = await binance_client.get_market_price(symbol)
         if not price:
-            print("Yeni pozisyon için fiyat alınamadı.")
+            print("❌ Yeni pozisyon için fiyat alınamadı.")
             return
             
         quantity = self._format_quantity((settings.ORDER_SIZE_USDT * settings.LEVERAGE) / price)
         if quantity <= 0:
-            print("Hesaplanan miktar çok düşük.")
+            print("❌ Hesaplanan miktar çok düşük.")
             return
 
-        # Güncellenmiş fonksiyonu kullan (SL + TP)
         order = await binance_client.create_market_order_with_sl_tp(
             symbol, side, quantity, price, self.price_precision
         )
@@ -228,10 +261,10 @@ class BotCore:
             self.status["position_side"] = new_signal
             self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı."
             self.status["order_size"] = settings.ORDER_SIZE_USDT
+            print(f"✅ {self.status['status_message']}")
         else:
             self.status["position_side"] = None
             self.status["status_message"] = "Yeni pozisyon açılamadı."
-            
-        print(self.status["status_message"])
+            print(f"❌ {self.status['status_message']}")
 
 bot_core = BotCore()
