@@ -19,8 +19,8 @@ class Settings:
     TIMEFRAME: str = "30m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
-    STOP_LOSS_PERCENT: float = 0.03  # %2 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.05 # %2 Kar Al
+    STOP_LOSS_PERCENT: float = 0.045  # %2 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.075 # %2 Kar Al
     COMPOUND_RATIO: float = 0.5 # Elde edilen karin %50'si bir sonraki islem miktarini artirmak icin kullanilir
 
 settings = Settings()
