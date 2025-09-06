@@ -15,8 +15,8 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 5
-    ORDER_SIZE_USDT: float = 40.0
-    TIMEFRAME: str = "30m"
+    ORDER_SIZE_USDT: float = 20.0
+    TIMEFRAME: str = "1m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     STOP_LOSS_PERCENT: float = 0.045  # %2 Zarar Durdur
