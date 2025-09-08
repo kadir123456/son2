@@ -20,6 +20,6 @@ class Settings:
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     STOP_LOSS_PERCENT: float = 0.008  # %0.8 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.004 # %1.0 Kar Al
+    TAKE_PROFIT_PERCENT: float = 0.0025 # %1.0 Kar Al
 
 settings = Settings()
