@@ -15,12 +15,11 @@ class Settings:
 
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 10
-    ORDER_SIZE_USDT: float = 20.0
+    ORDER_SIZE_USDT: float = 20.0  # Sabit işlem miktarı
     TIMEFRAME: str = "5m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
-    STOP_LOSS_PERCENT: float = 0.008  # %2 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.010 # %2 Kar Al
-    COMPOUND_RATIO: float = 0.5 # Elde edilen karin %50'si bir sonraki islem miktarini artirmak icin kullanilir
+    STOP_LOSS_PERCENT: float = 0.008  # %0.8 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.010 # %1.0 Kar Al
 
 settings = Settings()
