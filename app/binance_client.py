@@ -35,12 +35,29 @@ class BinanceClient:
             print(f"Hata: Pozisyon bilgileri alınamadı: {e}")
             return []
 
+    async def cancel_all_orders_safe(self, symbol: str):
+        """Tüm açık emirleri güvenli şekilde iptal eder"""
+        try:
+            open_orders = await self.client.futures_get_open_orders(symbol=symbol)
+            if open_orders:
+                print(f"{len(open_orders)} adet açık emir iptal ediliyor...")
+                await self.client.futures_cancel_all_open_orders(symbol=symbol)
+                await asyncio.sleep(0.5)  # İptal işleminin tamamlanması için bekle
+                print("Tüm açık emirler iptal edildi.")
+            return True
+        except BinanceAPIException as e:
+            print(f"Emirler iptal edilirken hata: {e}")
+            return False
+
     async def create_market_order_with_sl_tp(self, symbol: str, side: str, quantity: float, entry_price: float, price_precision: int):
         """Piyasa emri ile birlikte hem Stop Loss hem de Take Profit emri oluşturur"""
         def format_price(price):
             return f"{price:.{price_precision}f}"
             
         try:
+            # Önce tüm açık emirleri iptal et (yetim emir kalmasını önle)
+            await self.cancel_all_orders_safe(symbol)
+            
             # Ana piyasa emrini oluştur
             main_order = await self.client.futures_create_order(
                 symbol=symbol,
@@ -97,14 +114,13 @@ class BinanceClient:
         except BinanceAPIException as e:
             print(f"Hata: SL/TP ile emir oluşturulurken sorun oluştu: {e}")
             # Hata durumunda tüm açık emirleri iptal et
-            await self.client.futures_cancel_all_open_orders(symbol=symbol)
+            await self.cancel_all_orders_safe(symbol)
             return None
 
     async def close_position(self, symbol: str, position_amt: float, side_to_close: str):
         try:
             # Önce tüm açık emirleri iptal et
-            await self.client.futures_cancel_all_open_orders(symbol=symbol)
-            await asyncio.sleep(0.1)
+            await self.cancel_all_orders_safe(symbol)
             
             # Pozisyonu kapat
             response = await self.client.futures_create_order(
@@ -115,9 +131,16 @@ class BinanceClient:
                 reduceOnly=True
             )
             print(f"--> POZİSYON KAPATILDI: {symbol}")
+            
+            # Kapanış sonrası yetim emir kontrolü
+            await asyncio.sleep(0.5)
+            await self.cancel_all_orders_safe(symbol)
+            
             return response
         except BinanceAPIException as e:
             print(f"Hata: Pozisyon kapatılırken sorun oluştu: {e}")
+            # Hata durumunda da yetim emir kontrolü yap
+            await self.cancel_all_orders_safe(symbol)
             return None
 
     async def get_last_trade_pnl(self, symbol: str) -> float:
