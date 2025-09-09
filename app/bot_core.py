@@ -8,6 +8,7 @@ from .firebase_manager import firebase_manager
 from datetime import datetime, timezone
 import math
 import time
+import traceback
 
 class BotCore:
     def __init__(self):
@@ -54,64 +55,99 @@ class BotCore:
         print(self.status["status_message"])
         
         try:
+            # DEBUG: Config değerlerini kontrol et
+            print(f"DEBUG: STOP_LOSS_PERCENT = {settings.STOP_LOSS_PERCENT} (type: {type(settings.STOP_LOSS_PERCENT)})")
+            print(f"DEBUG: TAKE_PROFIT_PERCENT = {settings.TAKE_PROFIT_PERCENT} (type: {type(settings.TAKE_PROFIT_PERCENT)})")
+            print(f"DEBUG: ORDER_SIZE_USDT = {settings.ORDER_SIZE_USDT} (type: {type(settings.ORDER_SIZE_USDT)})")
+            
             # Binance bağlantısı
             print("1. Binance bağlantısı kuruluyor...")
-            await binance_client.initialize()
-            print("✅ Binance bağlantısı başarılı")
+            try:
+                await binance_client.initialize()
+                print("✅ Binance bağlantısı başarılı")
+            except Exception as binance_error:
+                print(f"❌ Binance bağlantı hatası: {binance_error}")
+                print(f"❌ Binance hata traceback: {traceback.format_exc()}")
+                raise binance_error
             
             # İlk hesap bakiyesi kontrolü
             print("2. Hesap bakiyesi kontrol ediliyor...")
-            self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
-            print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
+            try:
+                self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
+                print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
+            except Exception as balance_error:
+                print(f"❌ Bakiye kontrol hatası: {balance_error}")
+                print(f"❌ Bakiye hata traceback: {traceback.format_exc()}")
+                raise balance_error
             
             # Symbol bilgileri
             print(f"3. {symbol} sembol bilgileri alınıyor...")
-            symbol_info = await binance_client.get_symbol_info(symbol)
-            if not symbol_info:
-                error_msg = f"❌ {symbol} için borsa bilgileri alınamadı. Sembol doğru mu?"
-                print(error_msg)
-                self.status["status_message"] = error_msg
-                await self.stop()
-                return
-            print(f"✅ {symbol} sembol bilgileri alındı")
+            try:
+                symbol_info = await binance_client.get_symbol_info(symbol)
+                if not symbol_info:
+                    error_msg = f"❌ {symbol} için borsa bilgileri alınamadı. Sembol doğru mu?"
+                    print(error_msg)
+                    self.status["status_message"] = error_msg
+                    await self.stop()
+                    return
+                print(f"✅ {symbol} sembol bilgileri alındı")
+            except Exception as symbol_error:
+                print(f"❌ Symbol bilgisi hatası: {symbol_error}")
+                print(f"❌ Symbol hata traceback: {traceback.format_exc()}")
+                raise symbol_error
                 
             # Precision hesaplama
             print("4. Hassasiyet bilgileri hesaplanıyor...")
-            self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
-            self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
-            print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
+            try:
+                self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
+                self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
+                print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
+            except Exception as precision_error:
+                print(f"❌ Precision hesaplama hatası: {precision_error}")
+                print(f"❌ Precision hata traceback: {traceback.format_exc()}")
+                raise precision_error
             
             # Açık pozisyon kontrolü
             print("5. Açık pozisyonlar kontrol ediliyor...")
-            open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
-            if open_positions:
-                position = open_positions[0]
-                position_amt = float(position['positionAmt'])
-                if position_amt > 0:
-                    self.status["position_side"] = "LONG"
-                elif position_amt < 0:
-                    self.status["position_side"] = "SHORT"
-                print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
-                print("Mevcut kaldıraçla devam ediliyor...")
-            else:
-                print(f"✅ {symbol} için açık pozisyon yok")
-                # Kaldıraç ayarlama
-                print("6. Kaldıraç ayarlanıyor...")
-                if await binance_client.set_leverage(symbol, settings.LEVERAGE):
-                    print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
+            try:
+                open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
+                if open_positions:
+                    position = open_positions[0]
+                    position_amt = float(position['positionAmt'])
+                    if position_amt > 0:
+                        self.status["position_side"] = "LONG"
+                    elif position_amt < 0:
+                        self.status["position_side"] = "SHORT"
+                    print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
+                    print("Mevcut kaldıraçla devam ediliyor...")
                 else:
-                    print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
+                    print(f"✅ {symbol} için açık pozisyon yok")
+                    # Kaldıraç ayarlama
+                    print("6. Kaldıraç ayarlanıyor...")
+                    if await binance_client.set_leverage(symbol, settings.LEVERAGE):
+                        print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
+                    else:
+                        print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
+            except Exception as position_error:
+                print(f"❌ Pozisyon kontrolü hatası: {position_error}")
+                print(f"❌ Pozisyon hata traceback: {traceback.format_exc()}")
+                raise position_error
                 
             # Geçmiş veri çekme
             print("7. Geçmiş mum verileri çekiliyor...")
-            self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
-            if not self.klines:
-                error_msg = f"❌ {symbol} için geçmiş veri alınamadı"
-                print(error_msg)
-                self.status["status_message"] = error_msg
-                await self.stop()
-                return
-            print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
+            try:
+                self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+                if not self.klines:
+                    error_msg = f"❌ {symbol} için geçmiş veri alınamadı"
+                    print(error_msg)
+                    self.status["status_message"] = error_msg
+                    await self.stop()
+                    return
+                print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
+            except Exception as klines_error:
+                print(f"❌ Geçmiş veri çekme hatası: {klines_error}")
+                print(f"❌ Klines hata traceback: {traceback.format_exc()}")
+                raise klines_error
                 
             # WebSocket bağlantısı
             print("8. WebSocket bağlantısı kuruluyor...")
@@ -123,6 +159,7 @@ class BotCore:
         except Exception as e:
             error_msg = f"❌ Bot başlatılırken beklenmeyen hata: {e}"
             print(error_msg)
+            print(f"❌ Full traceback: {traceback.format_exc()}")
             self.status["status_message"] = error_msg
         
         print("Bot durduruluyor...")
