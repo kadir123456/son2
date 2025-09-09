@@ -302,7 +302,20 @@ class BotCore:
                 print(f"✅ {self.status['status_message']}")
                 
                 # Yeni pozisyon açıldıktan sonra cache'i temizle
-                if hasattr(binance_client, '_cached_positions'):
-                    binance_client._cached_positions.clear()
-                if hasattr(binance_client, '_last_position_check'):
-                    binance_client._last_position_check.clear()
+                try:
+                    if hasattr(binance_client, '_cached_positions'):
+                        binance_client._cached_positions.clear()
+                    if hasattr(binance_client, '_last_position_check'):
+                        binance_client._last_position_check.clear()
+                except Exception as cache_error:
+                    print(f"Cache temizleme hatası: {cache_error}")
+            else:
+                self.status["position_side"] = None
+                self.status["status_message"] = "Yeni pozisyon açılamadı."
+                print(f"❌ {self.status['status_message']}")
+                
+        except Exception as e:
+            print(f"Pozisyon değiştirme hatası: {e}")
+            self.status["position_side"] = None
+
+bot_core = BotCore()
