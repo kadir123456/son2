@@ -16,12 +16,12 @@ class BinanceClient:
         self._cached_balance = 0.0
         self._last_position_check = {}
         self._cached_positions = {}
-        self._rate_limit_delay = 0.1  # Minimum delay between requests
+        self._rate_limit_delay_time = 0.1  # Minimum delay between requests (RENAMED)
         print(f"Binance İstemcisi başlatılıyor. Ortam: {settings.ENVIRONMENT}")
         
     async def _rate_limit_delay(self):
         """Rate limit koruması için bekleme"""
-        await asyncio.sleep(self._rate_limit_delay)
+        await asyncio.sleep(self._rate_limit_delay_time)  # Use the renamed variable
         
     async def initialize(self):
         if self.client is None:
