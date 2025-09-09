@@ -7,6 +7,7 @@ from .trading_strategy import trading_strategy
 from .firebase_manager import firebase_manager
 from datetime import datetime, timezone
 import math
+import time
 
 class BotCore:
     def __init__(self):
@@ -23,6 +24,9 @@ class BotCore:
         self._stop_requested = False
         self.quantity_precision = 0
         self.price_precision = 0
+        self._last_status_update = 0
+        self._websocket_reconnect_attempts = 0
+        self._max_reconnect_attempts = 10
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
         for f in symbol_info['filters']:
@@ -39,6 +43,7 @@ class BotCore:
             return
             
         self._stop_requested = False
+        self._websocket_reconnect_attempts = 0
         self.status.update({
             "is_running": True, 
             "symbol": symbol, 
@@ -54,9 +59,9 @@ class BotCore:
             await binance_client.initialize()
             print("✅ Binance bağlantısı başarılı")
             
-            # Hesap bakiyesi kontrolü
+            # İlk hesap bakiyesi kontrolü
             print("2. Hesap bakiyesi kontrol ediliyor...")
-            self.status["account_balance"] = await binance_client.get_account_balance()
+            self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
             print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
             
             # Symbol bilgileri
@@ -78,7 +83,7 @@ class BotCore:
             
             # Açık pozisyon kontrolü
             print("5. Açık pozisyonlar kontrol ediliyor...")
-            open_positions = await binance_client.get_open_positions(symbol)
+            open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
             if open_positions:
                 position = open_positions[0]
                 position_amt = float(position['positionAmt'])
@@ -113,28 +118,7 @@ class BotCore:
             self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor..."
             print(f"✅ {self.status['status_message']}")
             
-            ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
-            print(f"WebSocket URL: {ws_url}")
-            
-            # WebSocket döngüsü - bağlantı koparsa yeniden bağlan
-            while not self._stop_requested:
-                try:
-                    async with websockets.connect(ws_url, ping_interval=30, ping_timeout=15) as ws:
-                        print(f"✅ WebSocket bağlantısı kuruldu")
-                        while not self._stop_requested:
-                            try:
-                                message = await asyncio.wait_for(ws.recv(), timeout=60.0)
-                                await self._handle_websocket_message(message)
-                            except asyncio.TimeoutError:
-                                print("WebSocket timeout, bağlantı kontrol ediliyor...")
-                                continue
-                            except websockets.exceptions.ConnectionClosed:
-                                print("WebSocket bağlantısı koptu, yeniden bağlanılıyor...")
-                                break
-                except Exception as e:
-                    if not self._stop_requested:
-                        print(f"WebSocket bağlantı hatası: {e}, 5 saniye sonra yeniden deneniyor...")
-                        await asyncio.sleep(5)
+            await self._start_websocket_loop()
                         
         except Exception as e:
             error_msg = f"❌ Bot başlatılırken beklenmeyen hata: {e}"
@@ -143,6 +127,54 @@ class BotCore:
         
         print("Bot durduruluyor...")
         await self.stop()
+
+    async def _start_websocket_loop(self):
+        """WebSocket bağlantı döngüsü - otomatik yeniden bağlanma ile"""
+        ws_url = f"{settings.WEBSOCKET_URL}/ws/{self.status['symbol'].lower()}@kline_{settings.TIMEFRAME}"
+        print(f"WebSocket URL: {ws_url}")
+        
+        while not self._stop_requested and self._websocket_reconnect_attempts < self._max_reconnect_attempts:
+            try:
+                async with websockets.connect(
+                    ws_url, 
+                    ping_interval=30, 
+                    ping_timeout=15,
+                    close_timeout=10
+                ) as ws:
+                    print(f"✅ WebSocket bağlantısı kuruldu (Deneme: {self._websocket_reconnect_attempts + 1})")
+                    self._websocket_reconnect_attempts = 0  # Başarılı bağlantıda reset
+                    
+                    while not self._stop_requested:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=65.0)
+                            await self._handle_websocket_message(message)
+                        except asyncio.TimeoutError:
+                            print("WebSocket timeout - bağlantı kontrol ediliyor...")
+                            # Ping/pong ile bağlantıyı test et
+                            try:
+                                await ws.ping()
+                                await asyncio.sleep(1)
+                            except:
+                                print("WebSocket ping başarısız - yeniden bağlanılıyor...")
+                                break
+                        except websockets.exceptions.ConnectionClosed:
+                            print("WebSocket bağlantısı koptu...")
+                            break
+                        except Exception as e:
+                            print(f"WebSocket mesaj işleme hatası: {e}")
+                            await asyncio.sleep(1)
+                            
+            except Exception as e:
+                if not self._stop_requested:
+                    self._websocket_reconnect_attempts += 1
+                    backoff_time = min(5 * self._websocket_reconnect_attempts, 30)
+                    print(f"WebSocket bağlantı hatası (Deneme {self._websocket_reconnect_attempts}/{self._max_reconnect_attempts}): {e}")
+                    print(f"{backoff_time} saniye sonra yeniden deneniyor...")
+                    await asyncio.sleep(backoff_time)
+        
+        if self._websocket_reconnect_attempts >= self._max_reconnect_attempts:
+            print(f"❌ WebSocket maksimum yeniden bağlanma denemesi ({self._max_reconnect_attempts}) aşıldı")
+            self.status["status_message"] = "WebSocket bağlantısı kurulamadı - Bot durduruluyor"
 
     async def stop(self):
         self._stop_requested = True
@@ -161,8 +193,11 @@ class BotCore:
             data = json.loads(message)
             kline_data = data.get('k', {})
             
-            # Durum bilgilerini güncelle
-            await self._update_status_info()
+            # Durum bilgilerini güncelle (rate limit'e takılmamak için seyrek)
+            current_time = time.time()
+            if current_time - self._last_status_update > 10:  # 10 saniyede bir güncelle
+                await self._update_status_info()
+                self._last_status_update = current_time
             
             # Sadece kapanan mumları işle
             if not kline_data.get('x', False):
@@ -174,8 +209,8 @@ class BotCore:
                 kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
             ] + ['0'])
             
-            # Pozisyon kontrolü
-            open_positions = await binance_client.get_open_positions(self.status["symbol"])
+            # Pozisyon kontrolü (cache kullanarak)
+            open_positions = await binance_client.get_open_positions(self.status["symbol"], use_cache=True)
             if self.status["position_side"] is not None and not open_positions:
                 print(f"--> Pozisyon SL/TP ile kapandı. Yeni sinyal bekleniyor.")
                 pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
@@ -198,15 +233,17 @@ class BotCore:
                 
         except Exception as e:
             print(f"WebSocket mesaj işlenirken hata: {e}")
-            # Hata durumunda botu durdurmak yerine devam et
 
     async def _update_status_info(self):
-        """Durum bilgilerini günceller"""
+        """Durum bilgilerini günceller - rate limit korumalı"""
         try:
             if self.status["is_running"]:
-                self.status["account_balance"] = await binance_client.get_account_balance()
+                # Cache kullanarak sorgu sayısını azalt
+                self.status["account_balance"] = await binance_client.get_account_balance(use_cache=True)
                 if self.status["position_side"]:
-                    self.status["position_pnl"] = await binance_client.get_position_pnl(self.status["symbol"])
+                    self.status["position_pnl"] = await binance_client.get_position_pnl(
+                        self.status["symbol"], use_cache=True
+                    )
                 else:
                     self.status["position_pnl"] = 0.0
                 self.status["order_size"] = settings.ORDER_SIZE_USDT
@@ -224,7 +261,7 @@ class BotCore:
         
         try:
             # Mevcut pozisyonu kapat
-            open_positions = await binance_client.get_open_positions(symbol)
+            open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
             if open_positions:
                 position = open_positions[0]
                 position_amt = float(position['positionAmt'])
@@ -263,13 +300,9 @@ class BotCore:
                 self.status["position_side"] = new_signal
                 self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı."
                 print(f"✅ {self.status['status_message']}")
-            else:
-                self.status["position_side"] = None
-                self.status["status_message"] = "Yeni pozisyon açılamadı."
-                print(f"❌ {self.status['status_message']}")
                 
-        except Exception as e:
-            print(f"Pozisyon değiştirme hatası: {e}")
-            self.status["position_side"] = None
-
-bot_core = BotCore()
+                # Yeni pozisyon açıldıktan sonra cache'i temizle
+                if hasattr(binance_client, '_cached_positions'):
+                    binance_client._cached_positions.clear()
+                if hasattr(binance_client, '_last_position_check'):
+                    binance_client._last_position_check.clear()
