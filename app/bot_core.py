@@ -19,7 +19,8 @@ class BotCore:
             "status_message": "Bot başlatılmadı.",
             "account_balance": 0.0,
             "position_pnl": 0.0,
-            "order_size": settings.ORDER_SIZE_USDT
+            "order_size": 0.0,  # Dinamik olacak
+            "dynamic_sizing": True  # Yeni özellik göstergesi
         }
         self.klines = []
         self._stop_requested = False
@@ -38,6 +39,33 @@ class BotCore:
                 return 0
         return 0
 
+    async def _calculate_dynamic_order_size(self):
+        """Dinamik pozisyon boyutu hesapla - bakiyenin %90'ı"""
+        try:
+            current_balance = await binance_client.get_account_balance(use_cache=False)
+            dynamic_size = current_balance * 0.9  # %90'ını kullan
+            
+            # Minimum/maksimum kontroller
+            min_size = 5.0  # Minimum 5 USDT
+            max_size = 1000.0  # Maksimum 1000 USDT (güvenlik için)
+            
+            final_size = max(min(dynamic_size, max_size), min_size)
+            
+            print(f"💰 Dinamik pozisyon hesaplama:")
+            print(f"   Mevcut bakiye: {current_balance:.2f} USDT")
+            print(f"   %90'ı: {dynamic_size:.2f} USDT")
+            print(f"   Kullanılacak tutar: {final_size:.2f} USDT")
+            
+            self.status["order_size"] = final_size
+            return final_size
+            
+        except Exception as e:
+            print(f"Dinamik pozisyon hesaplama hatası: {e}")
+            # Fallback: sabit tutar kullan
+            fallback_size = 35.0
+            self.status["order_size"] = fallback_size
+            return fallback_size
+
     async def start(self, symbol: str):
         if self.status["is_running"]:
             print("Bot zaten çalışıyor.")
@@ -50,16 +78,11 @@ class BotCore:
             "symbol": symbol, 
             "position_side": None, 
             "status_message": f"{symbol} için başlatılıyor...",
-            "order_size": settings.ORDER_SIZE_USDT
+            "dynamic_sizing": True
         })
         print(self.status["status_message"])
         
         try:
-            # DEBUG: Config değerlerini kontrol et
-            print(f"DEBUG: STOP_LOSS_PERCENT = {settings.STOP_LOSS_PERCENT} (type: {type(settings.STOP_LOSS_PERCENT)})")
-            print(f"DEBUG: TAKE_PROFIT_PERCENT = {settings.TAKE_PROFIT_PERCENT} (type: {type(settings.TAKE_PROFIT_PERCENT)})")
-            print(f"DEBUG: ORDER_SIZE_USDT = {settings.ORDER_SIZE_USDT} (type: {type(settings.ORDER_SIZE_USDT)})")
-            
             # Binance bağlantısı
             print("1. Binance bağlantısı kuruluyor...")
             try:
@@ -67,17 +90,17 @@ class BotCore:
                 print("✅ Binance bağlantısı başarılı")
             except Exception as binance_error:
                 print(f"❌ Binance bağlantı hatası: {binance_error}")
-                print(f"❌ Binance hata traceback: {traceback.format_exc()}")
                 raise binance_error
             
-            # İlk hesap bakiyesi kontrolü
+            # İlk hesap bakiyesi kontrolü ve dinamik sizing
             print("2. Hesap bakiyesi kontrol ediliyor...")
             try:
                 self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
+                initial_order_size = await self._calculate_dynamic_order_size()
                 print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
+                print(f"✅ İlk pozisyon boyutu: {initial_order_size} USDT")
             except Exception as balance_error:
                 print(f"❌ Bakiye kontrol hatası: {balance_error}")
-                print(f"❌ Bakiye hata traceback: {traceback.format_exc()}")
                 raise balance_error
             
             # Symbol bilgileri
@@ -93,7 +116,6 @@ class BotCore:
                 print(f"✅ {symbol} sembol bilgileri alındı")
             except Exception as symbol_error:
                 print(f"❌ Symbol bilgisi hatası: {symbol_error}")
-                print(f"❌ Symbol hata traceback: {traceback.format_exc()}")
                 raise symbol_error
                 
             # Precision hesaplama
@@ -104,7 +126,6 @@ class BotCore:
                 print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
             except Exception as precision_error:
                 print(f"❌ Precision hesaplama hatası: {precision_error}")
-                print(f"❌ Precision hata traceback: {traceback.format_exc()}")
                 raise precision_error
             
             # Açık pozisyon kontrolü
@@ -130,7 +151,6 @@ class BotCore:
                         print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
             except Exception as position_error:
                 print(f"❌ Pozisyon kontrolü hatası: {position_error}")
-                print(f"❌ Pozisyon hata traceback: {traceback.format_exc()}")
                 raise position_error
                 
             # Geçmiş veri çekme
@@ -146,12 +166,11 @@ class BotCore:
                 print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
             except Exception as klines_error:
                 print(f"❌ Geçmiş veri çekme hatası: {klines_error}")
-                print(f"❌ Klines hata traceback: {traceback.format_exc()}")
                 raise klines_error
                 
             # WebSocket bağlantısı
             print("8. WebSocket bağlantısı kuruluyor...")
-            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor..."
+            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor... [DİNAMİK SİZING AKTİF]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_websocket_loop()
@@ -220,7 +239,8 @@ class BotCore:
                 "is_running": False, 
                 "status_message": "Bot durduruldu.",
                 "account_balance": 0.0,
-                "position_pnl": 0.0
+                "position_pnl": 0.0,
+                "order_size": 0.0
             })
             print(self.status["status_message"])
             await binance_client.close()
@@ -259,6 +279,8 @@ class BotCore:
                 })
                 
                 self.status["position_side"] = None
+                # Pozisyon kapandıktan sonra yeni bakiye ile order size güncelle
+                await self._calculate_dynamic_order_size()
 
             # Sinyal analizi
             signal = trading_strategy.analyze_klines(self.klines)
@@ -283,7 +305,8 @@ class BotCore:
                     )
                 else:
                     self.status["position_pnl"] = 0.0
-                self.status["order_size"] = settings.ORDER_SIZE_USDT
+                # Order size'ı dinamik tut
+                await self._calculate_dynamic_order_size()
         except Exception as e:
             print(f"Durum güncelleme hatası: {e}")
 
@@ -316,15 +339,19 @@ class BotCore:
                 await binance_client.close_position(symbol, position_amt, side_to_close)
                 await asyncio.sleep(1)
 
+            # YENİ: Dinamik order size hesapla
+            print(f"--> Yeni {new_signal} pozisyonu için dinamik boyut hesaplanıyor...")
+            dynamic_order_size = await self._calculate_dynamic_order_size()
+            
             # Yeni pozisyon aç
-            print(f"--> Yeni {new_signal} pozisyonu açılıyor...")
+            print(f"--> Yeni {new_signal} pozisyonu açılıyor... (Tutar: {dynamic_order_size} USDT)")
             side = "BUY" if new_signal == "LONG" else "SELL"
             price = await binance_client.get_market_price(symbol)
             if not price:
                 print("❌ Yeni pozisyon için fiyat alınamadı.")
                 return
                 
-            quantity = self._format_quantity((settings.ORDER_SIZE_USDT * settings.LEVERAGE) / price)
+            quantity = self._format_quantity((dynamic_order_size * settings.LEVERAGE) / price)
             if quantity <= 0:
                 print("❌ Hesaplanan miktar çok düşük.")
                 return
@@ -335,7 +362,7 @@ class BotCore:
             
             if order:
                 self.status["position_side"] = new_signal
-                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı."
+                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı. (Tutar: {dynamic_order_size:.2f} USDT)"
                 print(f"✅ {self.status['status_message']}")
                 
                 # Yeni pozisyon açıldıktan sonra cache'i temizle
