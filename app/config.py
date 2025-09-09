@@ -14,29 +14,30 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = int(os.getenv("LEVERAGE", "5"))
-    ORDER_SIZE_USDT: float = float(os.getenv("ORDER_SIZE_USDT", "35.0"))  # Sabit işlem miktarı
-    TIMEFRAME: str = os.getenv("TIMEFRAME", "15m")
+    LEVERAGE: int = 5
+    ORDER_SIZE_USDT: float = 35.0
+    TIMEFRAME: str = "15m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
-    STOP_LOSS_PERCENT: float = float(os.getenv("STOP_LOSS_PERCENT", "0.008"))  # %0.8 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = float(os.getenv("TAKE_PROFIT_PERCENT", "0.010"))  # %1.0 Kar Al
+    # CRITICAL: Bu değerler float olmalı, callable değil!
+    STOP_LOSS_PERCENT: float = 0.008   # %0.8 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.012  # %1.2 Kar Al (optimize edilmiş)
     
     # --- Rate Limiting ve Performance Ayarları ---
-    MAX_REQUESTS_PER_MINUTE: int = int(os.getenv("MAX_REQUESTS_PER_MINUTE", "1200"))  # Binance limit: 2400
-    CACHE_DURATION_BALANCE: int = int(os.getenv("CACHE_DURATION_BALANCE", "10"))  # Bakiye cache süresi (saniye)
-    CACHE_DURATION_POSITION: int = int(os.getenv("CACHE_DURATION_POSITION", "5"))  # Pozisyon cache süresi (saniye)
-    CACHE_DURATION_PNL: int = int(os.getenv("CACHE_DURATION_PNL", "3"))  # PnL cache süresi (saniye)
+    MAX_REQUESTS_PER_MINUTE: int = 1200
+    CACHE_DURATION_BALANCE: int = 10
+    CACHE_DURATION_POSITION: int = 5
+    CACHE_DURATION_PNL: int = 3
     
     # --- WebSocket Ayarları ---
-    WEBSOCKET_PING_INTERVAL: int = int(os.getenv("WEBSOCKET_PING_INTERVAL", "30"))
-    WEBSOCKET_PING_TIMEOUT: int = int(os.getenv("WEBSOCKET_PING_TIMEOUT", "15"))
-    WEBSOCKET_CLOSE_TIMEOUT: int = int(os.getenv("WEBSOCKET_CLOSE_TIMEOUT", "10"))
-    WEBSOCKET_MAX_RECONNECTS: int = int(os.getenv("WEBSOCKET_MAX_RECONNECTS", "10"))
+    WEBSOCKET_PING_INTERVAL: int = 30
+    WEBSOCKET_PING_TIMEOUT: int = 15
+    WEBSOCKET_CLOSE_TIMEOUT: int = 10
+    WEBSOCKET_MAX_RECONNECTS: int = 10
     
     # --- Status Update Intervals ---
-    STATUS_UPDATE_INTERVAL: int = int(os.getenv("STATUS_UPDATE_INTERVAL", "10"))  # Ana durum güncelleme aralığı (saniye)
-    BALANCE_UPDATE_INTERVAL: int = int(os.getenv("BALANCE_UPDATE_INTERVAL", "30"))  # Bakiye güncelleme aralığı (saniye)
+    STATUS_UPDATE_INTERVAL: int = 10
+    BALANCE_UPDATE_INTERVAL: int = 30
 
     @classmethod
     def validate_settings(cls):
@@ -52,11 +53,12 @@ class Settings:
         if cls.ORDER_SIZE_USDT < 5:
             warnings.append(f"⚠️ İşlem miktarı çok düşük: {cls.ORDER_SIZE_USDT}. Minimum 5 USDT önerilir.")
         
-        if cls.STOP_LOSS_PERCENT <= 0 or cls.STOP_LOSS_PERCENT >= 1:
-            warnings.append(f"⚠️ Stop Loss yüzdesi geçersiz: {cls.STOP_LOSS_PERCENT}. 0-1 arası olmalı.")
+        # Float kontrolü ekle
+        if not isinstance(cls.STOP_LOSS_PERCENT, (int, float)) or cls.STOP_LOSS_PERCENT <= 0 or cls.STOP_LOSS_PERCENT >= 1:
+            warnings.append(f"⚠️ Stop Loss yüzdesi geçersiz: {cls.STOP_LOSS_PERCENT}. 0-1 arası float olmalı.")
         
-        if cls.TAKE_PROFIT_PERCENT <= 0 or cls.TAKE_PROFIT_PERCENT >= 1:
-            warnings.append(f"⚠️ Take Profit yüzdesi geçersiz: {cls.TAKE_PROFIT_PERCENT}. 0-1 arası olmalı.")
+        if not isinstance(cls.TAKE_PROFIT_PERCENT, (int, float)) or cls.TAKE_PROFIT_PERCENT <= 0 or cls.TAKE_PROFIT_PERCENT >= 1:
+            warnings.append(f"⚠️ Take Profit yüzdesi geçersiz: {cls.TAKE_PROFIT_PERCENT}. 0-1 arası float olmalı.")
         
         # Rate limit kontrolü
         if cls.MAX_REQUESTS_PER_MINUTE > 2000:
@@ -70,19 +72,23 @@ class Settings:
     @classmethod
     def print_settings(cls):
         """Mevcut ayarları yazdır"""
-        print("=" * 50)
-        print("📊 BOT AYARLARI")
-        print("=" * 50)
+        print("=" * 60)
+        print("🚀 OPTIMIZE EDİLMİŞ BOT AYARLARI")
+        print("=" * 60)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
         print(f"💰 İşlem Miktarı: {cls.ORDER_SIZE_USDT} USDT")
         print(f"📈 Kaldıraç: {cls.LEVERAGE}x")
-        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME}")
+        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME} ⭐ (Optimize)")
         print(f"🛑 Stop Loss: %{cls.STOP_LOSS_PERCENT * 100:.1f}")
         print(f"🎯 Take Profit: %{cls.TAKE_PROFIT_PERCENT * 100:.1f}")
+        print(f"📈 Risk/Reward Oranı: 1:{cls.TAKE_PROFIT_PERCENT/cls.STOP_LOSS_PERCENT:.1f}")
         print(f"🔄 Maks. İstek/Dakika: {cls.MAX_REQUESTS_PER_MINUTE}")
         print(f"💾 Cache Süreleri: Bakiye={cls.CACHE_DURATION_BALANCE}s, Pozisyon={cls.CACHE_DURATION_POSITION}s")
         print(f"🌐 WebSocket: Ping={cls.WEBSOCKET_PING_INTERVAL}s, Timeout={cls.WEBSOCKET_PING_TIMEOUT}s")
-        print("=" * 50)
+        print("=" * 60)
+        print("💡 15m + EMA(9,21) kombinasyonu crypto futures için optimize edilmiştir")
+        print("🎯 Risk/Reward oranı 1:1.5 - optimal kar/zarar dengesi")
+        print("=" * 60)
 
 settings = Settings()
 
