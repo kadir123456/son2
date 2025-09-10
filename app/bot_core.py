@@ -92,8 +92,19 @@ class BotCore:
                 print(f"❌ Binance bağlantı hatası: {binance_error}")
                 raise binance_error
             
+            # 🧹 YENİ ADIM: İlk yetim emir temizliği
+            print("2. 🧹 İlk yetim emir temizliği yapılıyor...")
+            try:
+                cleanup_result = await binance_client.cancel_all_orders_safe(symbol)
+                if cleanup_result:
+                    print("✅ İlk yetim emir temizliği başarılı")
+                else:
+                    print("⚠️ İlk yetim emir temizliği eksik - devam ediliyor")
+            except Exception as cleanup_error:
+                print(f"⚠️ İlk temizlik hatası: {cleanup_error} - devam ediliyor")
+            
             # İlk hesap bakiyesi kontrolü ve dinamik sizing
-            print("2. Hesap bakiyesi kontrol ediliyor...")
+            print("3. Hesap bakiyesi kontrol ediliyor...")
             try:
                 self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
                 initial_order_size = await self._calculate_dynamic_order_size()
@@ -104,7 +115,7 @@ class BotCore:
                 raise balance_error
             
             # Symbol bilgileri
-            print(f"3. {symbol} sembol bilgileri alınıyor...")
+            print(f"4. {symbol} sembol bilgileri alınıyor...")
             try:
                 symbol_info = await binance_client.get_symbol_info(symbol)
                 if not symbol_info:
@@ -119,7 +130,7 @@ class BotCore:
                 raise symbol_error
                 
             # Precision hesaplama
-            print("4. Hassasiyet bilgileri hesaplanıyor...")
+            print("5. Hassasiyet bilgileri hesaplanıyor...")
             try:
                 self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
                 self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
@@ -129,7 +140,7 @@ class BotCore:
                 raise precision_error
             
             # Açık pozisyon kontrolü
-            print("5. Açık pozisyonlar kontrol ediliyor...")
+            print("6. Açık pozisyonlar kontrol ediliyor...")
             try:
                 open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
                 if open_positions:
@@ -141,10 +152,15 @@ class BotCore:
                         self.status["position_side"] = "SHORT"
                     print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
                     print("Mevcut kaldıraçla devam ediliyor...")
+                    
+                    # Mevcut pozisyon varsa yetim emirleri tekrar temizle
+                    print("🧹 Mevcut pozisyon için ekstra yetim emir temizliği...")
+                    await binance_client.cancel_all_orders_safe(symbol)
+                    
                 else:
                     print(f"✅ {symbol} için açık pozisyon yok")
                     # Kaldıraç ayarlama
-                    print("6. Kaldıraç ayarlanıyor...")
+                    print("7. Kaldıraç ayarlanıyor...")
                     if await binance_client.set_leverage(symbol, settings.LEVERAGE):
                         print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
                     else:
@@ -154,7 +170,7 @@ class BotCore:
                 raise position_error
                 
             # Geçmiş veri çekme
-            print("7. Geçmiş mum verileri çekiliyor...")
+            print("8. Geçmiş mum verileri çekiliyor...")
             try:
                 self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
                 if not self.klines:
@@ -169,8 +185,8 @@ class BotCore:
                 raise klines_error
                 
             # WebSocket bağlantısı
-            print("8. WebSocket bağlantısı kuruluyor...")
-            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor... [DİNAMİK SİZING AKTİF]"
+            print("9. WebSocket bağlantısı kuruluyor...")
+            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor... [DİNAMİK SİZING + YETİM EMİR KORUMASII AKTİF]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_websocket_loop()
@@ -235,6 +251,14 @@ class BotCore:
     async def stop(self):
         self._stop_requested = True
         if self.status["is_running"]:
+            # 🧹 Bot durdururken son temizlik
+            if self.status.get("symbol"):
+                print(f"🧹 Bot durduruluyor - {self.status['symbol']} için son yetim emir temizliği...")
+                try:
+                    await binance_client.cancel_all_orders_safe(self.status["symbol"])
+                except Exception as final_cleanup_error:
+                    print(f"⚠️ Son temizlik hatası: {final_cleanup_error}")
+            
             self.status.update({
                 "is_running": False, 
                 "status_message": "Bot durduruldu.",
@@ -279,6 +303,11 @@ class BotCore:
                 })
                 
                 self.status["position_side"] = None
+                
+                # 🧹 Pozisyon kapandıktan sonra yetim emir temizliği
+                print("🧹 Pozisyon kapandı - yetim emir temizliği yapılıyor...")
+                await binance_client.cancel_all_orders_safe(self.status["symbol"])
+                
                 # Pozisyon kapandıktan sonra yeni bakiye ile order size güncelle
                 await self._calculate_dynamic_order_size()
 
@@ -320,6 +349,11 @@ class BotCore:
         symbol = self.status["symbol"]
         
         try:
+            # 🧹 ADIM 1: Pozisyon değişiminden önce yetim emir kontrolü
+            print(f"🧹 {symbol} pozisyon değişimi öncesi yetim emir temizliği...")
+            await binance_client.cancel_all_orders_safe(symbol)
+            await asyncio.sleep(0.2)
+            
             # Mevcut pozisyonu kapat
             open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
             if open_positions:
@@ -336,14 +370,27 @@ class BotCore:
                     "timestamp": datetime.now(timezone.utc)
                 })
 
-                await binance_client.close_position(symbol, position_amt, side_to_close)
+                # Pozisyonu kapat (içinde yetim emir temizliği var)
+                close_result = await binance_client.close_position(symbol, position_amt, side_to_close)
+                if not close_result:
+                    print("❌ Pozisyon kapatma başarısız - yeni pozisyon açılmayacak")
+                    return
+                    
                 await asyncio.sleep(1)
 
             # YENİ: Dinamik order size hesapla
             print(f"--> Yeni {new_signal} pozisyonu için dinamik boyut hesaplanıyor...")
             dynamic_order_size = await self._calculate_dynamic_order_size()
             
-            # Yeni pozisyon aç
+            # 🧹 ADIM 2: Yeni pozisyon açmadan önce son kontrol
+            print(f"🧹 {symbol} yeni pozisyon öncesi final yetim emir temizliği...")
+            final_cleanup = await binance_client.cancel_all_orders_safe(symbol)
+            if not final_cleanup:
+                print("⚠️ Final temizlik başarısız - devam ediliyor...")
+            
+            await asyncio.sleep(0.3)
+            
+            # 📈 ADIM 3: Yeni pozisyon aç
             print(f"--> Yeni {new_signal} pozisyonu açılıyor... (Tutar: {dynamic_order_size} USDT)")
             side = "BUY" if new_signal == "LONG" else "SELL"
             price = await binance_client.get_market_price(symbol)
@@ -356,16 +403,17 @@ class BotCore:
                 print("❌ Hesaplanan miktar çok düşük.")
                 return
 
+            # YETİM EMİR KORUMASLI pozisyon açma
             order = await binance_client.create_market_order_with_sl_tp(
                 symbol, side, quantity, price, self.price_precision
             )
             
             if order:
                 self.status["position_side"] = new_signal
-                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı. (Tutar: {dynamic_order_size:.2f} USDT)"
+                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı. (Tutar: {dynamic_order_size:.2f} USDT) [YETİM EMİR KORUMASII AKTİF]"
                 print(f"✅ {self.status['status_message']}")
                 
-                # Yeni pozisyon açıldıktan sonra cache'i temizle
+                # 🧹 ADIM 4: Yeni pozisyon sonrası cache temizle
                 try:
                     if hasattr(binance_client, '_cached_positions'):
                         binance_client._cached_positions.clear()
@@ -373,13 +421,28 @@ class BotCore:
                         binance_client._last_position_check.clear()
                 except Exception as cache_error:
                     print(f"Cache temizleme hatası: {cache_error}")
+                    
+                # 🧹 ADIM 5: Pozisyon açıldıktan 2 saniye sonra kontrol et
+                await asyncio.sleep(2)
+                print("🧹 Yeni pozisyon sonrası yetim emir kontrol ediliyor...")
+                await binance_client.cancel_all_orders_safe(symbol)
+                
             else:
                 self.status["position_side"] = None
                 self.status["status_message"] = "Yeni pozisyon açılamadı."
                 print(f"❌ {self.status['status_message']}")
                 
+                # Pozisyon açılmadıysa da temizlik yap
+                print("🧹 Başarısız pozisyon sonrası acil temizlik...")
+                await binance_client.force_cleanup_orders(symbol)
+                
         except Exception as e:
-            print(f"Pozisyon değiştirme hatası: {e}")
+            print(f"❌ Pozisyon değiştirme hatası: {e}")
+            print(f"🧹 Hata sonrası acil yetim emir temizliği...")
+            try:
+                await binance_client.force_cleanup_orders(symbol)
+            except Exception as cleanup_error:
+                print(f"⚠️ Acil temizlik de başarısız: {cleanup_error}")
             self.status["position_side"] = None
 
 bot_core = BotCore()
