@@ -74,26 +74,42 @@ class BinanceClient:
             await self._rate_limit_delay()
             open_orders = await self.client.futures_get_open_orders(symbol=symbol)
             if open_orders:
-                print(f"{len(open_orders)} adet açık emir iptal ediliyor...")
+                print(f"🧹 {len(open_orders)} adet yetim emir temizleniyor...")
                 await self._rate_limit_delay()
                 await self.client.futures_cancel_all_open_orders(symbol=symbol)
                 await asyncio.sleep(0.5)
-                print("Tüm açık emirler iptal edildi.")
-            return True
+                print("✅ Tüm yetim emirler temizlendi.")
+                return True
+            else:
+                print("✅ Temizlenecek yetim emir yok.")
+                return True
         except BinanceAPIException as e:
             if "-1003" in str(e):
-                print("Rate limit - emir iptali atlanıyor")
+                print("⚠️ Rate limit - emir iptali atlanıyor")
                 return False
-            print(f"Emirler iptal edilirken hata: {e}")
+            print(f"❌ Emirler iptal edilirken hata: {e}")
             return False
 
     async def create_market_order_with_sl_tp(self, symbol: str, side: str, quantity: float, entry_price: float, price_precision: int):
-        """Piyasa emri ile birlikte hem Stop Loss hem de Take Profit emri oluşturur"""
+        """
+        Piyasa emri ile birlikte hem Stop Loss hem de Take Profit emri oluşturur
+        YETİM EMİR KORUMASLI VERSİYON
+        """
         def format_price(price):
             return f"{price:.{price_precision}f}"
             
         try:
-            # Ana piyasa emrini oluştur
+            # 🧹 ADIM 1: Önce tüm açık emirleri temizle (YETİM EMİR KORUMASII)
+            print(f"🧹 {symbol} için yetim emir kontrolü yapılıyor...")
+            cleanup_success = await self.cancel_all_orders_safe(symbol)
+            if not cleanup_success:
+                print("⚠️ Yetim emir temizliği başarısız - devam ediliyor...")
+            
+            # Kısa bekleme - emirlerin tamamen iptal olması için
+            await asyncio.sleep(0.3)
+            
+            # 📈 ADIM 2: Ana piyasa emrini oluştur
+            print(f"📈 {symbol} {side} {quantity} ana piyasa emri oluşturuluyor...")
             await self._rate_limit_delay()
             main_order = await self.client.futures_create_order(
                 symbol=symbol,
@@ -101,12 +117,12 @@ class BinanceClient:
                 type='MARKET',
                 quantity=quantity
             )
-            print(f"Başarılı: {symbol} {side} {quantity} PİYASA EMRİ oluşturuldu.")
+            print(f"✅ Ana pozisyon başarılı: {symbol} {side} {quantity}")
             
-            # Kısa bekleme
+            # Pozisyon açıldıktan sonra bekleme - SL/TP için hazır olması için
             await asyncio.sleep(0.8)
             
-            # Stop Loss ve Take Profit fiyatlarını hesapla
+            # 🛡️ ADIM 3: Stop Loss ve Take Profit fiyatlarını hesapla
             if side == 'BUY':  # Long pozisyon
                 sl_price = entry_price * (1 - settings.STOP_LOSS_PERCENT)
                 tp_price = entry_price * (1 + settings.TAKE_PROFIT_PERCENT)
@@ -119,8 +135,12 @@ class BinanceClient:
             formatted_sl_price = format_price(sl_price)
             formatted_tp_price = format_price(tp_price)
             
-            # Stop Loss emrini oluştur
+            # 🛑 ADIM 4: Stop Loss emrini oluştur - HATA KORUMASLI
+            sl_success = False
+            tp_success = False
+            
             try:
+                print(f"🛑 Stop Loss emri oluşturuluyor: {formatted_sl_price}")
                 await self._rate_limit_delay()
                 sl_order = await self.client.futures_create_order(
                     symbol=symbol,
@@ -129,12 +149,15 @@ class BinanceClient:
                     stopPrice=formatted_sl_price,
                     closePosition=True
                 )
-                print(f"Başarılı: {symbol} için STOP LOSS emri {formatted_sl_price} seviyesine kuruldu.")
+                print(f"✅ STOP LOSS başarılı: {formatted_sl_price}")
+                sl_success = True
             except BinanceAPIException as e:
-                print(f"Hata: Stop Loss emri oluşturulamadı: {e}")
+                print(f"❌ Stop Loss emri hatası: {e}")
+                # SL başarısız olursa TP'yi deneme
             
-            # Take Profit emrini oluştur
+            # 🎯 ADIM 5: Take Profit emrini oluştur - HATA KORUMASLI
             try:
+                print(f"🎯 Take Profit emri oluşturuluyor: {formatted_tp_price}")
                 await self._rate_limit_delay()
                 tp_order = await self.client.futures_create_order(
                     symbol=symbol,
@@ -143,19 +166,48 @@ class BinanceClient:
                     stopPrice=formatted_tp_price,
                     closePosition=True
                 )
-                print(f"Başarılı: {symbol} için TAKE PROFIT emri {formatted_tp_price} seviyesine kuruldu.")
+                print(f"✅ TAKE PROFIT başarılı: {formatted_tp_price}")
+                tp_success = True
             except BinanceAPIException as e:
-                print(f"Hata: Take Profit emri oluşturulamadı: {e}")
+                print(f"❌ Take Profit emri hatası: {e}")
+            
+            # 📊 ADIM 6: Sonuç raporu ve güvenlik kontrolü
+            if not sl_success and not tp_success:
+                print("⚠️ UYARI: Ne SL ne de TP kurulabildi! Manuel kontrol gerekebilir.")
+            elif not sl_success:
+                print("⚠️ UYARI: Sadece TP kuruldu, SL kurulamadı!")
+            elif not tp_success:
+                print("⚠️ UYARI: Sadece SL kuruldu, TP kurulamadı!")
+            else:
+                print("✅ Pozisyon tam korumalı: Hem SL hem TP kuruldu.")
             
             return main_order
             
         except BinanceAPIException as e:
-            print(f"Hata: SL/TP ile emir oluşturulurken sorun oluştu: {e}")
+            print(f"❌ KRITIK HATA: Ana pozisyon emri oluşturulamadı: {e}")
+            # Ana emir başarısız olursa mutlaka temizlik yap
+            print("🧹 Hata sonrası acil temizlik yapılıyor...")
+            await self.cancel_all_orders_safe(symbol)
+            return None
+        except Exception as e:
+            print(f"❌ BEKLENMEYEN HATA: {e}")
+            # Genel hata durumunda da temizlik yap
+            print("🧹 Beklenmeyen hata sonrası temizlik yapılıyor...")
+            await self.cancel_all_orders_safe(symbol)
             return None
 
     async def close_position(self, symbol: str, position_amt: float, side_to_close: str):
+        """
+        Pozisyon kapatır - YETİM EMİR TEMİZLİĞİ İLE
+        """
         try:
-            # Pozisyonu kapat
+            # 🧹 ADIM 1: Pozisyon kapatmadan önce açık emirleri temizle
+            print(f"🧹 {symbol} pozisyon kapatma öncesi yetim emir temizliği...")
+            await self.cancel_all_orders_safe(symbol)
+            await asyncio.sleep(0.2)
+            
+            # 📉 ADIM 2: Pozisyonu kapat
+            print(f"📉 {symbol} pozisyonu kapatılıyor: {abs(position_amt)} miktar")
             await self._rate_limit_delay()
             response = await self.client.futures_create_order(
                 symbol=symbol,
@@ -164,17 +216,25 @@ class BinanceClient:
                 quantity=abs(position_amt),
                 reduceOnly=True
             )
-            print(f"--> POZİSYON KAPATILDI: {symbol}")
+            print(f"✅ POZİSYON KAPATILDI: {symbol}")
             
-            # Kapanış sonrası cache temizle
+            # 🧹 ADIM 3: Kapanış sonrası ekstra temizlik (ihtiyaten)
+            await asyncio.sleep(0.5)
+            await self.cancel_all_orders_safe(symbol)
+            
+            # 💾 ADIM 4: Cache temizle
             if symbol in self._cached_positions:
                 del self._cached_positions[symbol]
             if symbol in self._last_position_check:
                 del self._last_position_check[symbol]
             
             return response
+            
         except BinanceAPIException as e:
-            print(f"Hata: Pozisyon kapatılırken sorun oluştu: {e}")
+            print(f"❌ Pozisyon kapatma hatası: {e}")
+            # Hata durumunda yine de temizlik yap
+            print("🧹 Hata sonrası acil yetim emir temizliği...")
+            await self.cancel_all_orders_safe(symbol)
             return None
 
     async def get_last_trade_pnl(self, symbol: str) -> float:
@@ -319,5 +379,55 @@ class BinanceClient:
                 return self._cached_positions.get(f"{symbol}_pnl", 0.0)
             print(f"Hata: Pozisyon PnL'i alınamadı: {e}")
             return 0.0
+
+    async def force_cleanup_orders(self, symbol: str):
+        """
+        ACIL DURUM: Tüm açık emirleri zorla temizler
+        """
+        try:
+            print(f"🚨 {symbol} için ZORLA YETİM EMİR TEMİZLİĞİ başlatılıyor...")
+            max_attempts = 3
+            
+            for attempt in range(max_attempts):
+                print(f"🧹 Temizlik denemesi {attempt + 1}/{max_attempts}")
+                
+                # Açık emirleri kontrol et
+                await self._rate_limit_delay()
+                open_orders = await self.client.futures_get_open_orders(symbol=symbol)
+                
+                if not open_orders:
+                    print(f"✅ {symbol} için yetim emir kalmadı.")
+                    return True
+                
+                print(f"🎯 {len(open_orders)} adet yetim emir tespit edildi.")
+                
+                # Tek tek iptal etmeyi dene
+                for order in open_orders:
+                    try:
+                        await self._rate_limit_delay()
+                        await self.client.futures_cancel_order(
+                            symbol=symbol, 
+                            orderId=order['orderId']
+                        )
+                        print(f"✅ Emir iptal edildi: {order['orderId']}")
+                    except Exception as order_error:
+                        print(f"⚠️ Emir iptal hatası: {order_error}")
+                
+                # Toplu iptal dene
+                try:
+                    await self._rate_limit_delay()
+                    await self.client.futures_cancel_all_open_orders(symbol=symbol)
+                    print("🧹 Toplu iptal komutu gönderildi")
+                except Exception as batch_error:
+                    print(f"⚠️ Toplu iptal hatası: {batch_error}")
+                
+                await asyncio.sleep(1)  # Sonraki deneme için bekle
+            
+            print(f"⚠️ {max_attempts} deneme sonrası bazı yetim emirler kalabilir.")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Zorla temizlik hatası: {e}")
+            return False
 
 binance_client = BinanceClient()
