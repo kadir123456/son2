@@ -1,3 +1,5 @@
+# app/bot_core.py - GÜNCELLENMIŞ HALİ
+
 import asyncio
 import json
 import websockets
@@ -5,6 +7,7 @@ from .config import settings
 from .binance_client import binance_client
 from .trading_strategy import trading_strategy
 from .firebase_manager import firebase_manager
+from .position_manager import position_manager  # YENİ IMPORT
 from datetime import datetime, timezone
 import math
 import time
@@ -19,8 +22,9 @@ class BotCore:
             "status_message": "Bot başlatılmadı.",
             "account_balance": 0.0,
             "position_pnl": 0.0,
-            "order_size": 0.0,  # Dinamik olacak
-            "dynamic_sizing": True  # Yeni özellik göstergesi
+            "order_size": 0.0,
+            "dynamic_sizing": True,
+            "position_monitor_active": False  # YENİ ALAN
         }
         self.klines = []
         self._stop_requested = False
@@ -43,11 +47,10 @@ class BotCore:
         """Dinamik pozisyon boyutu hesapla - bakiyenin %90'ı"""
         try:
             current_balance = await binance_client.get_account_balance(use_cache=False)
-            dynamic_size = current_balance * 0.9  # %90'ını kullan
+            dynamic_size = current_balance * 0.9
             
-            # Minimum/maksimum kontroller
-            min_size = 5.0  # Minimum 5 USDT
-            max_size = 1000.0  # Maksimum 1000 USDT (güvenlik için)
+            min_size = 5.0
+            max_size = 1000.0
             
             final_size = max(min(dynamic_size, max_size), min_size)
             
@@ -61,7 +64,6 @@ class BotCore:
             
         except Exception as e:
             print(f"Dinamik pozisyon hesaplama hatası: {e}")
-            # Fallback: sabit tutar kullan
             fallback_size = 35.0
             self.status["order_size"] = fallback_size
             return fallback_size
@@ -78,12 +80,13 @@ class BotCore:
             "symbol": symbol, 
             "position_side": None, 
             "status_message": f"{symbol} için başlatılıyor...",
-            "dynamic_sizing": True
+            "dynamic_sizing": True,
+            "position_monitor_active": False
         })
         print(self.status["status_message"])
         
         try:
-            # Binance bağlantısı
+            # 1. Binance bağlantısı
             print("1. Binance bağlantısı kuruluyor...")
             try:
                 await binance_client.initialize()
@@ -92,7 +95,7 @@ class BotCore:
                 print(f"❌ Binance bağlantı hatası: {binance_error}")
                 raise binance_error
             
-            # 🧹 YENİ ADIM: İlk yetim emir temizliği
+            # 2. Yetim emir temizliği
             print("2. 🧹 İlk yetim emir temizliği yapılıyor...")
             try:
                 cleanup_result = await binance_client.cancel_all_orders_safe(symbol)
@@ -103,208 +106,12 @@ class BotCore:
             except Exception as cleanup_error:
                 print(f"⚠️ İlk temizlik hatası: {cleanup_error} - devam ediliyor")
             
-            # İlk hesap bakiyesi kontrolü ve dinamik sizing
+            # 3. Hesap bakiyesi kontrolü
             print("3. Hesap bakiyesi kontrol ediliyor...")
             try:
-                self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
-                initial_order_size = await self._calculate_dynamic_order_size()
-                print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
-                print(f"✅ İlk pozisyon boyutu: {initial_order_size} USDT")
-            except Exception as balance_error:
-                print(f"❌ Bakiye kontrol hatası: {balance_error}")
-                raise balance_error
-            
-            # Symbol bilgileri
-            print(f"4. {symbol} sembol bilgileri alınıyor...")
-            try:
-                symbol_info = await binance_client.get_symbol_info(symbol)
-                if not symbol_info:
-                    error_msg = f"❌ {symbol} için borsa bilgileri alınamadı. Sembol doğru mu?"
-                    print(error_msg)
-                    self.status["status_message"] = error_msg
-                    await self.stop()
-                    return
-                print(f"✅ {symbol} sembol bilgileri alındı")
-            except Exception as symbol_error:
-                print(f"❌ Symbol bilgisi hatası: {symbol_error}")
-                raise symbol_error
-                
-            # Precision hesaplama
-            print("5. Hassasiyet bilgileri hesaplanıyor...")
-            try:
-                self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
-                self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
-                print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
-            except Exception as precision_error:
-                print(f"❌ Precision hesaplama hatası: {precision_error}")
-                raise precision_error
-            
-            # Açık pozisyon kontrolü
-            print("6. Açık pozisyonlar kontrol ediliyor...")
-            try:
-                open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
-                if open_positions:
-                    position = open_positions[0]
-                    position_amt = float(position['positionAmt'])
-                    if position_amt > 0:
-                        self.status["position_side"] = "LONG"
-                    elif position_amt < 0:
-                        self.status["position_side"] = "SHORT"
-                    print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
-                    print("Mevcut kaldıraçla devam ediliyor...")
-                    
-                    # Mevcut pozisyon varsa yetim emirleri tekrar temizle
-                    print("🧹 Mevcut pozisyon için ekstra yetim emir temizliği...")
-                    await binance_client.cancel_all_orders_safe(symbol)
-                    
-                else:
-                    print(f"✅ {symbol} için açık pozisyon yok")
-                    # Kaldıraç ayarlama
-                    print("7. Kaldıraç ayarlanıyor...")
-                    if await binance_client.set_leverage(symbol, settings.LEVERAGE):
-                        print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
-                    else:
-                        print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
-            except Exception as position_error:
-                print(f"❌ Pozisyon kontrolü hatası: {position_error}")
-                raise position_error
-                
-            # Geçmiş veri çekme
-            print("8. Geçmiş mum verileri çekiliyor...")
-            try:
-                self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
-                if not self.klines:
-                    error_msg = f"❌ {symbol} için geçmiş veri alınamadı"
-                    print(error_msg)
-                    self.status["status_message"] = error_msg
-                    await self.stop()
-                    return
-                print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
-            except Exception as klines_error:
-                print(f"❌ Geçmiş veri çekme hatası: {klines_error}")
-                raise klines_error
-                
-            # WebSocket bağlantısı
-            print("9. WebSocket bağlantısı kuruluyor...")
-            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor... [DİNAMİK SİZING + YETİM EMİR KORUMASII AKTİF]"
-            print(f"✅ {self.status['status_message']}")
-            
-            await self._start_websocket_loop()
-                        
-        except Exception as e:
-            error_msg = f"❌ Bot başlatılırken beklenmeyen hata: {e}"
-            print(error_msg)
-            print(f"❌ Full traceback: {traceback.format_exc()}")
-            self.status["status_message"] = error_msg
-        
-        print("Bot durduruluyor...")
-        await self.stop()
-
-    async def _start_websocket_loop(self):
-        """WebSocket bağlantı döngüsü - otomatik yeniden bağlanma ile"""
-        ws_url = f"{settings.WEBSOCKET_URL}/ws/{self.status['symbol'].lower()}@kline_{settings.TIMEFRAME}"
-        print(f"WebSocket URL: {ws_url}")
-        
-        while not self._stop_requested and self._websocket_reconnect_attempts < self._max_reconnect_attempts:
-            try:
-                async with websockets.connect(
-                    ws_url, 
-                    ping_interval=30, 
-                    ping_timeout=15,
-                    close_timeout=10
-                ) as ws:
-                    print(f"✅ WebSocket bağlantısı kuruldu (Deneme: {self._websocket_reconnect_attempts + 1})")
-                    self._websocket_reconnect_attempts = 0  # Başarılı bağlantıda reset
-                    
-                    while not self._stop_requested:
-                        try:
-                            message = await asyncio.wait_for(ws.recv(), timeout=65.0)
-                            await self._handle_websocket_message(message)
-                        except asyncio.TimeoutError:
-                            print("WebSocket timeout - bağlantı kontrol ediliyor...")
-                            # Ping/pong ile bağlantıyı test et
-                            try:
-                                await ws.ping()
-                                await asyncio.sleep(1)
-                            except:
-                                print("WebSocket ping başarısız - yeniden bağlanılıyor...")
-                                break
-                        except websockets.exceptions.ConnectionClosed:
-                            print("WebSocket bağlantısı koptu...")
-                            break
-                        except Exception as e:
-                            print(f"WebSocket mesaj işleme hatası: {e}")
-                            await asyncio.sleep(1)
-                            
-            except Exception as e:
-                if not self._stop_requested:
-                    self._websocket_reconnect_attempts += 1
-                    backoff_time = min(5 * self._websocket_reconnect_attempts, 30)
-                    print(f"WebSocket bağlantı hatası (Deneme {self._websocket_reconnect_attempts}/{self._max_reconnect_attempts}): {e}")
-                    print(f"{backoff_time} saniye sonra yeniden deneniyor...")
-                    await asyncio.sleep(backoff_time)
-        
-        if self._websocket_reconnect_attempts >= self._max_reconnect_attempts:
-            print(f"❌ WebSocket maksimum yeniden bağlanma denemesi ({self._max_reconnect_attempts}) aşıldı")
-            self.status["status_message"] = "WebSocket bağlantısı kurulamadı - Bot durduruluyor"
-
-    async def stop(self):
-        self._stop_requested = True
-        if self.status["is_running"]:
-            # 🧹 Bot durdururken son temizlik
-            if self.status.get("symbol"):
-                print(f"🧹 Bot durduruluyor - {self.status['symbol']} için son yetim emir temizliği...")
-                try:
-                    await binance_client.cancel_all_orders_safe(self.status["symbol"])
-                except Exception as final_cleanup_error:
-                    print(f"⚠️ Son temizlik hatası: {final_cleanup_error}")
-            
-            self.status.update({
-                "is_running": False, 
-                "status_message": "Bot durduruldu.",
-                "account_balance": 0.0,
-                "position_pnl": 0.0,
-                "order_size": 0.0
-            })
-            print(self.status["status_message"])
-            await binance_client.close()
-
-    async def _handle_websocket_message(self, message: str):
-        try:
-            data = json.loads(message)
-            kline_data = data.get('k', {})
-            
-            # Durum bilgilerini güncelle (rate limit'e takılmamak için seyrek)
-            current_time = time.time()
-            if current_time - self._last_status_update > 10:  # 10 saniyede bir güncelle
-                await self._update_status_info()
-                self._last_status_update = current_time
-            
-            # Sadece kapanan mumları işle
-            if not kline_data.get('x', False):
-                return
-                
-            print(f"Yeni mum kapandı: {self.status['symbol']} ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
-            self.klines.pop(0)
-            self.klines.append([
-                kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
-            ] + ['0'])
-            
-            # Pozisyon kontrolü (cache kullanarak)
-            open_positions = await binance_client.get_open_positions(self.status["symbol"], use_cache=True)
-            if self.status["position_side"] is not None and not open_positions:
-                print(f"--> Pozisyon SL/TP ile kapandı. Yeni sinyal bekleniyor.")
-                pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
-                firebase_manager.log_trade({
-                    "symbol": self.status["symbol"], 
-                    "pnl": pnl, 
-                    "status": "CLOSED_BY_SL_TP", 
-                    "timestamp": datetime.now(timezone.utc)
-                })
-                
                 self.status["position_side"] = None
                 
-                # 🧹 Pozisyon kapandıktan sonra yetim emir temizliği
+                # Pozisyon kapandıktan sonra yetim emir temizliği
                 print("🧹 Pozisyon kapandı - yetim emir temizliği yapılıyor...")
                 await binance_client.cancel_all_orders_safe(self.status["symbol"])
                 
@@ -336,6 +143,11 @@ class BotCore:
                     self.status["position_pnl"] = 0.0
                 # Order size'ı dinamik tut
                 await self._calculate_dynamic_order_size()
+                
+                # 🆕 Position monitor durumunu güncelle
+                monitor_status = position_manager.get_status()
+                self.status["position_monitor_active"] = monitor_status["is_running"]
+                
         except Exception as e:
             print(f"Durum güncelleme hatası: {e}")
 
@@ -349,7 +161,7 @@ class BotCore:
         symbol = self.status["symbol"]
         
         try:
-            # 🧹 ADIM 1: Pozisyon değişiminden önce yetim emir kontrolü
+            # Pozisyon değişiminden önce yetim emir kontrolü
             print(f"🧹 {symbol} pozisyon değişimi öncesi yetim emir temizliği...")
             await binance_client.cancel_all_orders_safe(symbol)
             await asyncio.sleep(0.2)
@@ -370,7 +182,7 @@ class BotCore:
                     "timestamp": datetime.now(timezone.utc)
                 })
 
-                # Pozisyonu kapat (içinde yetim emir temizliği var)
+                # Pozisyonu kapat
                 close_result = await binance_client.close_position(symbol, position_amt, side_to_close)
                 if not close_result:
                     print("❌ Pozisyon kapatma başarısız - yeni pozisyon açılmayacak")
@@ -378,11 +190,11 @@ class BotCore:
                     
                 await asyncio.sleep(1)
 
-            # YENİ: Dinamik order size hesapla
+            # Dinamik order size hesapla
             print(f"--> Yeni {new_signal} pozisyonu için dinamik boyut hesaplanıyor...")
             dynamic_order_size = await self._calculate_dynamic_order_size()
             
-            # 🧹 ADIM 2: Yeni pozisyon açmadan önce son kontrol
+            # Yeni pozisyon açmadan önce son kontrol
             print(f"🧹 {symbol} yeni pozisyon öncesi final yetim emir temizliği...")
             final_cleanup = await binance_client.cancel_all_orders_safe(symbol)
             if not final_cleanup:
@@ -390,7 +202,7 @@ class BotCore:
             
             await asyncio.sleep(0.3)
             
-            # 📈 ADIM 3: Yeni pozisyon aç
+            # Yeni pozisyon aç
             print(f"--> Yeni {new_signal} pozisyonu açılıyor... (Tutar: {dynamic_order_size} USDT)")
             side = "BUY" if new_signal == "LONG" else "SELL"
             price = await binance_client.get_market_price(symbol)
@@ -410,10 +222,10 @@ class BotCore:
             
             if order:
                 self.status["position_side"] = new_signal
-                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı. (Tutar: {dynamic_order_size:.2f} USDT) [YETİM EMİR KORUMASII AKTİF]"
+                self.status["status_message"] = f"Yeni {new_signal} pozisyonu {price} fiyattan açıldı. (Tutar: {dynamic_order_size:.2f} USDT) [OTOMATIK TP/SL KORUMASII AKTİF]"
                 print(f"✅ {self.status['status_message']}")
                 
-                # 🧹 ADIM 4: Yeni pozisyon sonrası cache temizle
+                # Cache temizle
                 try:
                     if hasattr(binance_client, '_cached_positions'):
                         binance_client._cached_positions.clear()
@@ -422,10 +234,10 @@ class BotCore:
                 except Exception as cache_error:
                     print(f"Cache temizleme hatası: {cache_error}")
                     
-                # 🧹 ADIM 5: Pozisyon açıldıktan 2 saniye sonra kontrol et
+                # 🆕 Yeni pozisyon için position manager'a bildir
                 await asyncio.sleep(2)
-                print("🧹 Yeni pozisyon sonrası yetim emir kontrol ediliyor...")
-                await binance_client.cancel_all_orders_safe(symbol)
+                print("🛡️ Yeni pozisyon otomatik TP/SL sisteme bildiriliyor...")
+                await position_manager.manual_scan_symbol(symbol)
                 
             else:
                 self.status["position_side"] = None
@@ -445,4 +257,254 @@ class BotCore:
                 print(f"⚠️ Acil temizlik de başarısız: {cleanup_error}")
             self.status["position_side"] = None
 
-bot_core = BotCore()
+    # 🆕 YENİ METODLAR
+    async def scan_all_positions(self):
+        """Tüm açık pozisyonları manuel tarayıp TP/SL ekle"""
+        if not self.status["is_running"]:
+            return {"success": False, "message": "Bot çalışmıyor"}
+            
+        try:
+            print("🔍 Manuel pozisyon taraması başlatılıyor...")
+            
+            # Position manager ile tam tarama yap
+            await position_manager._scan_and_protect_positions()
+            
+            return {
+                "success": True, 
+                "message": "Tüm pozisyonlar tarandı ve gerekli TP/SL eklendi",
+                "monitor_status": position_manager.get_status()
+            }
+        except Exception as e:
+            return {"success": False, "message": f"Tarama hatası: {e}"}
+    
+    async def scan_specific_symbol(self, symbol: str):
+        """Belirli bir coin için manuel TP/SL kontrolü"""
+        try:
+            print(f"🎯 {symbol} için manuel TP/SL kontrolü...")
+            success = await position_manager.manual_scan_symbol(symbol)
+            
+            return {
+                "success": success,
+                "symbol": symbol,
+                "message": f"{symbol} için TP/SL kontrolü tamamlandı"
+            }
+        except Exception as e:
+            return {"success": False, "message": f"{symbol} kontrolü hatası: {e}"}
+
+bot_core = BotCore()account_balance"] = await binance_client.get_account_balance(use_cache=False)
+                initial_order_size = await self._calculate_dynamic_order_size()
+                print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
+                print(f"✅ İlk pozisyon boyutu: {initial_order_size} USDT")
+            except Exception as balance_error:
+                print(f"❌ Bakiye kontrol hatası: {balance_error}")
+                raise balance_error
+            
+            # 4. Symbol bilgileri
+            print(f"4. {symbol} sembol bilgileri alınıyor...")
+            try:
+                symbol_info = await binance_client.get_symbol_info(symbol)
+                if not symbol_info:
+                    error_msg = f"❌ {symbol} için borsa bilgileri alınamadı. Sembol doğru mu?"
+                    print(error_msg)
+                    self.status["status_message"] = error_msg
+                    await self.stop()
+                    return
+                print(f"✅ {symbol} sembol bilgileri alındı")
+            except Exception as symbol_error:
+                print(f"❌ Symbol bilgisi hatası: {symbol_error}")
+                raise symbol_error
+                
+            # 5. Precision hesaplama
+            print("5. Hassasiyet bilgileri hesaplanıyor...")
+            try:
+                self.quantity_precision = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
+                self.price_precision = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
+                print(f"✅ Miktar Hassasiyeti: {self.quantity_precision}, Fiyat Hassasiyeti: {self.price_precision}")
+            except Exception as precision_error:
+                print(f"❌ Precision hesaplama hatası: {precision_error}")
+                raise precision_error
+            
+            # 6. Açık pozisyon kontrolü
+            print("6. Açık pozisyonlar kontrol ediliyor...")
+            try:
+                open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
+                if open_positions:
+                    position = open_positions[0]
+                    position_amt = float(position['positionAmt'])
+                    if position_amt > 0:
+                        self.status["position_side"] = "LONG"
+                    elif position_amt < 0:
+                        self.status["position_side"] = "SHORT"
+                    print(f"⚠️ {symbol} için açık pozisyon tespit edildi: {self.status['position_side']}")
+                    print("Mevcut kaldıraçla devam ediliyor...")
+                    
+                    # Mevcut pozisyon için yetim emirleri temizle
+                    print("🧹 Mevcut pozisyon için ekstra yetim emir temizliği...")
+                    await binance_client.cancel_all_orders_safe(symbol)
+                    
+                    # 🆕 YENİ: Mevcut pozisyon için TP/SL kontrol et
+                    print("🛡️ Mevcut pozisyon için TP/SL kontrolü yapılıyor...")
+                    await position_manager.manual_scan_symbol(symbol)
+                    
+                else:
+                    print(f"✅ {symbol} için açık pozisyon yok")
+                    # Kaldıraç ayarlama
+                    print("7. Kaldıraç ayarlanıyor...")
+                    if await binance_client.set_leverage(symbol, settings.LEVERAGE):
+                        print(f"✅ Kaldıraç {settings.LEVERAGE}x olarak ayarlandı")
+                    else:
+                        print("⚠️ Kaldıraç ayarlanamadı, mevcut kaldıraçla devam ediliyor")
+            except Exception as position_error:
+                print(f"❌ Pozisyon kontrolü hatası: {position_error}")
+                raise position_error
+                
+            # 8. Geçmiş veri çekme
+            print("8. Geçmiş mum verileri çekiliyor...")
+            try:
+                self.klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+                if not self.klines:
+                    error_msg = f"❌ {symbol} için geçmiş veri alınamadı"
+                    print(error_msg)
+                    self.status["status_message"] = error_msg
+                    await self.stop()
+                    return
+                print(f"✅ {len(self.klines)} adet geçmiş mum verisi alındı")
+            except Exception as klines_error:
+                print(f"❌ Geçmiş veri çekme hatası: {klines_error}")
+                raise klines_error
+            
+            # 🆕 9. Pozisyon Monitoring Başlat
+            print("9. 🛡️ Otomatik TP/SL monitoring başlatılıyor...")
+            try:
+                # Position manager'ı arka planda başlat
+                asyncio.create_task(position_manager.start_monitoring())
+                self.status["position_monitor_active"] = True
+                print("✅ Otomatik TP/SL koruması aktif")
+            except Exception as monitor_error:
+                print(f"⚠️ Position monitoring başlatılamadı: {monitor_error}")
+                
+            # 10. WebSocket bağlantısı
+            print("10. WebSocket bağlantısı kuruluyor...")
+            self.status["status_message"] = f"{symbol} ({settings.TIMEFRAME}) için sinyal bekleniyor... [DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
+            print(f"✅ {self.status['status_message']}")
+            
+            await self._start_websocket_loop()
+                        
+        except Exception as e:
+            error_msg = f"❌ Bot başlatılırken beklenmeyen hata: {e}"
+            print(error_msg)
+            print(f"❌ Full traceback: {traceback.format_exc()}")
+            self.status["status_message"] = error_msg
+        
+        print("Bot durduruluyor...")
+        await self.stop()
+
+    async def _start_websocket_loop(self):
+        """WebSocket bağlantı döngüsü - otomatik yeniden bağlanma ile"""
+        ws_url = f"{settings.WEBSOCKET_URL}/ws/{self.status['symbol'].lower()}@kline_{settings.TIMEFRAME}"
+        print(f"WebSocket URL: {ws_url}")
+        
+        while not self._stop_requested and self._websocket_reconnect_attempts < self._max_reconnect_attempts:
+            try:
+                async with websockets.connect(
+                    ws_url, 
+                    ping_interval=30, 
+                    ping_timeout=15,
+                    close_timeout=10
+                ) as ws:
+                    print(f"✅ WebSocket bağlantısı kuruldu (Deneme: {self._websocket_reconnect_attempts + 1})")
+                    self._websocket_reconnect_attempts = 0
+                    
+                    while not self._stop_requested:
+                        try:
+                            message = await asyncio.wait_for(ws.recv(), timeout=65.0)
+                            await self._handle_websocket_message(message)
+                        except asyncio.TimeoutError:
+                            print("WebSocket timeout - bağlantı kontrol ediliyor...")
+                            try:
+                                await ws.ping()
+                                await asyncio.sleep(1)
+                            except:
+                                print("WebSocket ping başarısız - yeniden bağlanılıyor...")
+                                break
+                        except websockets.exceptions.ConnectionClosed:
+                            print("WebSocket bağlantısı koptu...")
+                            break
+                        except Exception as e:
+                            print(f"WebSocket mesaj işleme hatası: {e}")
+                            await asyncio.sleep(1)
+                            
+            except Exception as e:
+                if not self._stop_requested:
+                    self._websocket_reconnect_attempts += 1
+                    backoff_time = min(5 * self._websocket_reconnect_attempts, 30)
+                    print(f"WebSocket bağlantı hatası (Deneme {self._websocket_reconnect_attempts}/{self._max_reconnect_attempts}): {e}")
+                    print(f"{backoff_time} saniye sonra yeniden deneniyor...")
+                    await asyncio.sleep(backoff_time)
+        
+        if self._websocket_reconnect_attempts >= self._max_reconnect_attempts:
+            print(f"❌ WebSocket maksimum yeniden bağlanma denemesi ({self._max_reconnect_attempts}) aşıldı")
+            self.status["status_message"] = "WebSocket bağlantısı kurulamadı - Bot durduruluyor"
+
+    async def stop(self):
+        self._stop_requested = True
+        if self.status["is_running"]:
+            # 🆕 Position monitoring'i durdur
+            if self.status.get("position_monitor_active"):
+                print("🛡️ Otomatik TP/SL monitoring durduruluyor...")
+                await position_manager.stop_monitoring()
+                self.status["position_monitor_active"] = False
+            
+            # Bot durdururken son temizlik
+            if self.status.get("symbol"):
+                print(f"🧹 Bot durduruluyor - {self.status['symbol']} için son yetim emir temizliği...")
+                try:
+                    await binance_client.cancel_all_orders_safe(self.status["symbol"])
+                except Exception as final_cleanup_error:
+                    print(f"⚠️ Son temizlik hatası: {final_cleanup_error}")
+            
+            self.status.update({
+                "is_running": False, 
+                "status_message": "Bot durduruldu.",
+                "account_balance": 0.0,
+                "position_pnl": 0.0,
+                "order_size": 0.0,
+                "position_monitor_active": False
+            })
+            print(self.status["status_message"])
+            await binance_client.close()
+
+    async def _handle_websocket_message(self, message: str):
+        try:
+            data = json.loads(message)
+            kline_data = data.get('k', {})
+            
+            # Durum bilgilerini güncelle
+            current_time = time.time()
+            if current_time - self._last_status_update > 10:
+                await self._update_status_info()
+                self._last_status_update = current_time
+            
+            # Sadece kapanan mumları işle
+            if not kline_data.get('x', False):
+                return
+                
+            print(f"Yeni mum kapandı: {self.status['symbol']} ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
+            self.klines.pop(0)
+            self.klines.append([
+                kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
+            ] + ['0'])
+            
+            # Pozisyon kontrolü
+            open_positions = await binance_client.get_open_positions(self.status["symbol"], use_cache=True)
+            if self.status["position_side"] is not None and not open_positions:
+                print(f"--> Pozisyon SL/TP ile kapandı. Yeni sinyal bekleniyor.")
+                pnl = await binance_client.get_last_trade_pnl(self.status["symbol"])
+                firebase_manager.log_trade({
+                    "symbol": self.status["symbol"], 
+                    "pnl": pnl, 
+                    "status": "CLOSED_BY_SL_TP", 
+                    "timestamp": datetime.now(timezone.utc)
+                })
+                
+                self.status["
