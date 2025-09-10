@@ -21,7 +21,7 @@ class Settings:
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     # CRITICAL: Bu değerler float olmalı, callable değil!
     STOP_LOSS_PERCENT: float = 0.008   # %0.8 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.012  # %1.2 Kar Al (optimize edilmiş)
+    TAKE_PROFIT_PERCENT: float = 0.005  # %1.2 Kar Al (optimize edilmiş)
     
     # --- Rate Limiting ve Performance Ayarları ---
     MAX_REQUESTS_PER_MINUTE: int = 1200
