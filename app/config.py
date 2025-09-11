@@ -16,12 +16,12 @@ class Settings:
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 10
     ORDER_SIZE_USDT: float = 35.0
-    TIMEFRAME: str = "3m"
+    TIMEFRAME: str = "15m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     # CRITICAL: Bu değerler float olmalı, callable değil!
-    STOP_LOSS_PERCENT: float = 0.003   # %0.8 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.003  # %1.2 Kar Al (optimize edilmiş)
+    STOP_LOSS_PERCENT: float = 0.008   # %0.8 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.0012 # %1.2 Kar Al (optimize edilmiş)
     
     # --- Rate Limiting ve Performance Ayarları ---
     MAX_REQUESTS_PER_MINUTE: int = 1200
