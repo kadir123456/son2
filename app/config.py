@@ -14,7 +14,7 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = 5
+    LEVERAGE: int = 10
     ORDER_SIZE_USDT: float = 35.0
     TIMEFRAME: str = "5m"
     
