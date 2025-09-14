@@ -1,4 +1,4 @@
-# app/main.py - GÜNCELLENMIŞ HALİ
+# app/main.py - MULTI-COIN DESTEKLİ VERSİYON
 
 import asyncio
 import time
@@ -7,10 +7,11 @@ from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from typing import List
 from .bot_core import bot_core
 from .config import settings
 from .firebase_manager import firebase_manager
-from .position_manager import position_manager  # YENİ IMPORT
+from .position_manager import position_manager
 
 bearer_scheme = HTTPBearer()
 
@@ -60,12 +61,12 @@ async def authenticate(token: str = Depends(bearer_scheme)):
     print(f"Doğrulanan kullanıcı: {user.get('email')}")
     return user
 
-app = FastAPI(title="Binance Futures Bot", version="2.2.0")
+app = FastAPI(title="Multi-Coin Binance Futures Bot", version="3.0.0")
 
 @app.on_event("startup")
 async def startup_event():
     """Uygulama başlangıcında ayarları doğrula"""
-    print("🚀 Bot başlatılıyor...")
+    print("🚀 Multi-Coin Bot başlatılıyor...")
     settings.validate_settings()
     settings.print_settings()
 
@@ -75,32 +76,141 @@ async def shutdown_event():
         await bot_core.stop()
     await position_manager.stop_monitoring()
 
-class StartRequest(BaseModel):
+# ============ YENİ MODEL'LER - MULTI-COIN ============
+class MultiStartRequest(BaseModel):
+    symbols: List[str]  # Birden fazla symbol
+
+class AddSymbolRequest(BaseModel):
+    symbol: str
+
+class RemoveSymbolRequest(BaseModel):
     symbol: str
 
 class SymbolRequest(BaseModel):
     symbol: str
 
-# ============ MEVCUT ENDPOINT'LER ============
+# ============ MULTI-COIN ENDPOINT'LER ============
 
-@app.post("/api/start")
-async def start_bot(request: StartRequest, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
+@app.post("/api/multi-start")
+async def start_multi_bot(request: MultiStartRequest, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
+    """Birden fazla coin ile bot başlat"""
     if bot_core.status["is_running"]:
         raise HTTPException(status_code=400, detail="Bot zaten çalışıyor.")
     
-    symbol = request.symbol.upper().strip()
+    if not request.symbols or len(request.symbols) == 0:
+        raise HTTPException(status_code=400, detail="En az bir symbol gerekli.")
     
+    if len(request.symbols) > 20:
+        raise HTTPException(status_code=400, detail="Maksimum 20 symbol desteklenir.")
+    
+    # Symbolları normalize et
+    normalized_symbols = []
+    for symbol in request.symbols:
+        symbol = symbol.upper().strip()
+        if not symbol.endswith('USDT'):
+            symbol += 'USDT'
+        
+        if len(symbol) < 6 or len(symbol) > 20:
+            raise HTTPException(status_code=400, detail=f"Geçersiz sembol formatı: {symbol}")
+        
+        if symbol not in normalized_symbols:  # Duplicate kontrolü
+            normalized_symbols.append(symbol)
+    
+    print(f"👤 {user.get('email')} tarafından multi-coin bot başlatılıyor: {', '.join(normalized_symbols)}")
+    
+    background_tasks.add_task(bot_core.start, normalized_symbols)
+    await asyncio.sleep(2)
+    return bot_core.get_multi_status()
+
+@app.post("/api/add-symbol")
+async def add_symbol_to_bot(request: AddSymbolRequest, user: dict = Depends(authenticate)):
+    """Çalışan bot'a yeni symbol ekle"""
+    if not bot_core.status["is_running"]:
+        raise HTTPException(status_code=400, detail="Bot çalışmıyor.")
+    
+    symbol = request.symbol.upper().strip()
     if not symbol.endswith('USDT'):
         symbol += 'USDT'
     
     if len(symbol) < 6 or len(symbol) > 20:
         raise HTTPException(status_code=400, detail="Geçersiz sembol formatı.")
     
-    print(f"👤 {user.get('email')} tarafından bot başlatılıyor: {symbol}")
+    if len(bot_core.status["symbols"]) >= 20:
+        raise HTTPException(status_code=400, detail="Maksimum 20 symbol desteklenir.")
     
-    background_tasks.add_task(bot_core.start, symbol)
-    await asyncio.sleep(1.5)
-    return bot_core.status
+    print(f"👤 {user.get('email')} tarafından symbol ekleniyor: {symbol}")
+    
+    result = await bot_core.add_symbol(symbol)
+    if result["success"]:
+        return {
+            "success": True,
+            "message": result["message"],
+            "current_symbols": bot_core.status["symbols"],
+            "user": user.get('email'),
+            "timestamp": time.time()
+        }
+    else:
+        raise HTTPException(status_code=400, detail=result["message"])
+
+@app.post("/api/remove-symbol")
+async def remove_symbol_from_bot(request: RemoveSymbolRequest, user: dict = Depends(authenticate)):
+    """Çalışan bot'tan symbol çıkar"""
+    if not bot_core.status["is_running"]:
+        raise HTTPException(status_code=400, detail="Bot çalışmıyor.")
+    
+    symbol = request.symbol.upper().strip()
+    if not symbol.endswith('USDT'):
+        symbol += 'USDT'
+    
+    if len(bot_core.status["symbols"]) <= 1:
+        raise HTTPException(status_code=400, detail="En az bir symbol bot'ta kalmalı.")
+    
+    print(f"👤 {user.get('email')} tarafından symbol çıkarılıyor: {symbol}")
+    
+    result = await bot_core.remove_symbol(symbol)
+    if result["success"]:
+        return {
+            "success": True,
+            "message": result["message"],
+            "current_symbols": bot_core.status["symbols"],
+            "user": user.get('email'),
+            "timestamp": time.time()
+        }
+    else:
+        raise HTTPException(status_code=400, detail=result["message"])
+
+@app.get("/api/multi-status")
+async def get_multi_status(user: dict = Depends(authenticate)):
+    """Multi-coin bot durumunu döndür"""
+    return bot_core.get_multi_status()
+
+# ============ GERİYE UYUMLULUK - ESKİ ENDPOINT'LER ============
+
+@app.post("/api/start")
+async def start_bot(request: dict, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
+    """Tek symbol için geriye uyumluluk - artık multi-coin olarak çalışır"""
+    symbol = request.get("symbol", "").upper().strip()
+    if not symbol.endswith('USDT'):
+        symbol += 'USDT'
+    
+    print(f"👤 {user.get('email')} tarafından tek symbol bot başlatılıyor: {symbol} (multi-coin modunda)")
+    
+    # Tek symbol'ü liste olarak gönder
+    background_tasks.add_task(bot_core.start, [symbol])
+    await asyncio.sleep(2)
+    
+    # Eski format için uyumlu response
+    status = bot_core.get_multi_status()
+    return {
+        "is_running": status["is_running"],
+        "symbol": status["symbols"][0] if status["symbols"] else None,
+        "position_side": status["position_side"],
+        "status_message": status["status_message"],
+        "account_balance": status["account_balance"],
+        "position_pnl": status["position_pnl"],
+        "order_size": status["order_size"],
+        "position_monitor_active": status["position_monitor_active"]
+    }
 
 @app.post("/api/stop")
 async def stop_bot(user: dict = Depends(authenticate)):
@@ -109,14 +219,23 @@ async def stop_bot(user: dict = Depends(authenticate)):
     
     print(f"👤 {user.get('email')} tarafından bot durduruluyor")
     await bot_core.stop()
-    return bot_core.status
+    return bot_core.get_multi_status()
 
 @app.get("/api/status")
 async def get_status(user: dict = Depends(authenticate)):
-    # Durum bilgisine position manager durumunu da ekle
-    status = bot_core.status.copy()
-    status["position_manager"] = position_manager.get_status()
-    return status
+    """Geriye uyumluluk için eski format status"""
+    status = bot_core.get_multi_status()
+    return {
+        "is_running": status["is_running"],
+        "symbol": status["active_symbol"],  # Aktif symbol'ü döndür
+        "position_side": status["position_side"],
+        "status_message": status["status_message"],
+        "account_balance": status["account_balance"],
+        "position_pnl": status["position_pnl"],
+        "order_size": status["order_size"],
+        "position_monitor_active": status["position_monitor_active"],
+        "position_manager": status["position_manager"]
+    }
 
 @app.get("/api/health")
 async def health_check():
@@ -125,11 +244,14 @@ async def health_check():
         "status": "healthy",
         "timestamp": time.time(),
         "bot_running": bot_core.status["is_running"],
+        "symbols_count": len(bot_core.status["symbols"]),
+        "active_symbol": bot_core.status["active_symbol"],
         "position_monitor_running": position_manager.is_running,
-        "version": "2.2.0"
+        "websocket_connections": len(bot_core._websocket_connections),
+        "version": "3.0.0"
     }
 
-# ============ YENİ ENDPOINT'LER - POZISYON YÖNETİMİ ============
+# ============ POZISYON YÖNETİMİ ENDPOINT'LERİ ============
 
 @app.post("/api/scan-all-positions")
 async def scan_all_positions(user: dict = Depends(authenticate)):
