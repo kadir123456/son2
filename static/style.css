@@ -7,8 +7,12 @@
     --primary-color: #238636; /* Yeşil */
     --danger-color: #da3633;  /* Kırmızı */
     --info-color: #1f6feb;   /* Mavi */
+    --warning-color: #f85149; /* Turuncu */
+    --secondary-color: #6e7681; /* Gri */
     --disabled-color: #21262d;
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --success-color: #2ea043;
+    --monitoring-color: #7c3aed;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,7 +40,7 @@ body {
 
 #app-container {
     align-items: flex-start;
-    max-width: 500px;
+    max-width: 600px; /* Multi-coin için daha geniş */
 }
 
 header {
@@ -48,6 +52,10 @@ header {
 
 header h1 {
     font-size: 1.75rem;
+    background: linear-gradient(45deg, var(--primary-color), var(--info-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .subtitle, header p {
@@ -108,7 +116,7 @@ header h1 {
     color: var(--text-muted-color);
 }
 
-input[type="email"], input[type="password"], #symbol-input {
+input[type="email"], input[type="password"], input[type="text"] {
     width: 100%;
     padding: 0.7rem;
     border: 1px solid var(--border-color);
@@ -129,10 +137,12 @@ input:focus {
 .button-group {
     display: flex;
     gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .btn {
-    width: 100%;
+    flex: 1;
+    min-width: 120px;
     padding: 0.75rem 1rem;
     border: none;
     border-radius: 6px;
@@ -144,9 +154,15 @@ input:focus {
 
 .btn:active { transform: scale(0.98); }
 .btn-start { background-color: var(--primary-color); color: #fff; }
-.btn-start:hover:not(:disabled) { background-color: #2ea043; }
+.btn-start:hover:not(:disabled) { background-color: var(--success-color); }
 .btn-stop { background-color: var(--danger-color); color: #fff; }
-.btn-stop:hover:not(:disabled) { background-color: #f85149; }
+.btn-stop:hover:not(:disabled) { background-color: var(--warning-color); }
+.btn-info { background-color: var(--info-color); color: #fff; }
+.btn-info:hover:not(:disabled) { background-color: #2188ff; }
+.btn-warning { background-color: var(--warning-color); color: #fff; }
+.btn-warning:hover:not(:disabled) { background-color: #ff6b6b; }
+.btn-secondary { background-color: var(--secondary-color); color: #fff; }
+.btn-secondary:hover:not(:disabled) { background-color: #8b949e; }
 .btn:disabled { background-color: var(--disabled-color); color: var(--text-muted-color); cursor: not-allowed; }
 
 .status-grid {
@@ -161,11 +177,274 @@ input:focus {
 .status-value span { font-weight: 500; padding: 3px 8px; border-radius: 4px; display: inline-block; }
 .status-running { background-color: var(--primary-color); color: #fff; }
 .status-stopped { background-color: var(--danger-color); color: #fff; }
+.status-monitoring { background-color: var(--monitoring-color); color: #fff; }
 .status-in-position { background-color: var(--info-color); color: #fff; }
+
 .error-message { color: var(--danger-color); text-align: center; margin-top: 1rem; font-size: 0.9rem; min-height: 1.2em; }
-.stats-card h2 { color: var(--info-color); }
-.stats-grid { display: grid; grid-template-columns: 1fr auto; gap: 1rem; }
-.stats-label { font-weight: 400; color: var(--text-muted-color); }
-.stats-value { font-weight: 700; font-size: 1.1rem; text-align: right; }
+
+/* ============ MULTI-COIN SPECIFIC STYLES ============ */
+
+.symbols-card h2 { 
+    color: var(--monitoring-color); 
+    border-bottom-color: var(--monitoring-color);
+}
+
+.symbols-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.symbol-item {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.symbol-item:hover {
+    border-color: var(--info-color);
+    box-shadow: 0 0 0 2px rgba(31, 111, 235, 0.2);
+}
+
+.symbol-item.active-symbol {
+    border-color: var(--primary-color);
+    background-color: rgba(35, 134, 54, 0.1);
+    box-shadow: 0 0 0 2px rgba(35, 134, 54, 0.3);
+}
+
+.symbol-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+.symbol-signal {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-align: center;
+    min-width: 60px;
+}
+
+.signal-long {
+    background-color: var(--primary-color);
+    color: #fff;
+}
+
+.signal-short {
+    background-color: var(--danger-color);
+    color: #fff;
+}
+
+.signal-hold {
+    background-color: var(--secondary-color);
+    color: #fff;
+}
+
+/* Controls card özel stili */
+.controls-card h2 { 
+    color: var(--info-color); 
+    border-bottom-color: var(--info-color);
+}
+
+/* Legacy card stili */
+.legacy-card {
+    opacity: 0.8;
+    border-color: var(--secondary-color);
+}
+
+.legacy-card h2 {
+    color: var(--secondary-color);
+    border-bottom-color: var(--secondary-color);
+}
+
+/* Stats card stili */
+.stats-card h2 { 
+    color: var(--primary-color); 
+    border-bottom-color: var(--primary-color);
+}
+
+.stats-grid { 
+    display: grid; 
+    grid-template-columns: 1fr auto; 
+    gap: 1rem; 
+}
+
+.stats-label { 
+    font-weight: 400; 
+    color: var(--text-muted-color); 
+}
+
+.stats-value { 
+    font-weight: 700; 
+    font-size: 1.1rem; 
+    text-align: right; 
+}
+
 .pnl-positive { color: var(--primary-color); }
 .pnl-negative { color: var(--danger-color); }
+
+/* ============ RESPONSIVE DESIGN ============ */
+
+@media (max-width: 768px) {
+    #app-container {
+        max-width: 100%;
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+    
+    .btn {
+        min-width: unset;
+        flex: unset;
+    }
+    
+    .symbols-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .symbol-item {
+        min-width: unset;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .stats-value {
+        text-align: left;
+        margin-bottom: 1rem;
+    }
+    
+    header h1 {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 0.5rem;
+    }
+    
+    .card {
+        padding: 1rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .btn {
+        padding: 0.6rem 0.8rem;
+        font-size: 0.9rem;
+    }
+    
+    header h1 {
+        font-size: 1.3rem;
+    }
+}
+
+/* ============ ADVANCED ANIMATIONS ============ */
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.card {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.symbol-item.active-symbol {
+    animation: pulse 2s infinite;
+}
+
+.status-running {
+    animation: pulse 3s infinite;
+}
+
+/* ============ LOADING STATES ============ */
+
+.btn:disabled {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn:disabled::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+/* ============ CUSTOM SCROLLBAR ============ */
+
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+/* ============ TOOLTIP STYLES (future enhancement) ============ */
+
+[title] {
+    position: relative;
+    cursor: help;
+}
+
+/* ============ STATUS INDICATORS ============ */
+
+.status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-indicator.running {
+    background-color: var(--primary-color);
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.stopped {
+    background-color: var(--danger-color);
+}
+
+.status-indicator.monitoring {
+    background-color: var(--monitoring-color);
+    animation: pulse 2s infinite;
+}
