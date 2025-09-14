@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kısa vadeli</title>
+    <title>Multi-Coin Bot</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,7 +13,7 @@
 
     <div id="login-container" class="container">
         <div class="card login-card">
-            <h1>Bot Kontrol Paneli</h1>
+            <h1>Multi-Coin Bot Kontrol Paneli</h1>
             <p class="subtitle">Lütfen giriş yapın</p>
             <div class="form-group">
                 <label for="email">E-posta</label>
@@ -30,13 +30,14 @@
 
     <div id="app-container" class="container" style="display: none;">
         <header>
-            <h1>Kısa vadeli kesişim</h1>
+            <h1>Multi-Coin Bot v3.0</h1>
             <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
         <main>
+            <!-- CÜZDAN DURUMU -->
             <div class="card status-card">
-                <h2>Cüzdan Durumu</h2>
+                <h2>💰 Cüzdan Durumu</h2>
                 <div class="stats-grid">
                     <p class="stats-label">Ana Bakiye (USDT):</p>
                     <p class="stats-value" id="stats-main-balance">Yükleniyor...</p>
@@ -47,34 +48,73 @@
                 </div>
             </div>
 
+            <!-- MULTI-COIN BOT DURUMU -->
             <div class="card status-card">
-                <h2>Anlık Bot Durumu</h2>
+                <h2>🤖 Multi-Coin Bot Durumu</h2>
                 <div class="status-grid">
-                    <p class="status-label">Mesaj:</p>
+                    <p class="status-label">Durum:</p>
                     <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
-                    <p class="status-label">İzlenen Sembol:</p>
-                    <p class="status-value"><span id="current-symbol">N/A</span></p>
-                    <p class="status-label">Pozisyon Durumu:</p>
-                    <p class="status-value"><span id="position-status">Hayır</span></p>
-                    <p class="status-label">Son Sinyal:</p>
-                    <p class="status-value"><span id="last-signal">N/A</span></p>
+                    <p class="status-label">İzlenen Coinler:</p>
+                    <p class="status-value"><span id="monitored-symbols">Hayır</span></p>
+                    <p class="status-label">Aktif Pozisyon:</p>
+                    <p class="status-value"><span id="active-position">Hayır</span></p>
+                    <p class="status-label">WebSocket Bağlantıları:</p>
+                    <p class="status-value"><span id="websocket-count">0</span></p>
                 </div>
             </div>
 
+            <!-- COIN YÖNETİMİ -->
             <div class="card controls-card">
-                <h2>Bot Yönetimi</h2>
+                <h2>🎯 Coin Yönetimi</h2>
+                
+                <!-- Multi-Coin Başlatma -->
                 <div class="form-group">
-                    <label for="symbol-input">İşlem Yapılacak Coin</label>
-                    <input type="text" id="symbol-input" placeholder="Örn: BTCUSDT">
+                    <label for="multi-symbols-input">İzlenecek Coinler (virgülle ayırın)</label>
+                    <input type="text" id="multi-symbols-input" placeholder="BTC, ETH, ADA, SOL, DOT" 
+                           title="Örnek: BTC, ETH, ADA, SOL, DOT">
                 </div>
                 <div class="button-group">
-                    <button id="start-button" class="btn btn-start">Botu Başlat</button>
-                    <button id="stop-button" class="btn btn-stop" disabled>Botu Durdur</button>
+                    <button id="multi-start-button" class="btn btn-start">Multi-Coin Bot Başlat</button>
+                    <button id="stop-button" class="btn btn-stop" disabled>Bot Durdur</button>
+                </div>
+
+                <!-- Coin Ekleme/Çıkarma -->
+                <div class="form-group" id="coin-management" style="display: none;">
+                    <label for="single-symbol-input">Tek Coin Ekle/Çıkar</label>
+                    <input type="text" id="single-symbol-input" placeholder="Örn: AVAX">
+                </div>
+                <div class="button-group" id="coin-buttons" style="display: none;">
+                    <button id="add-symbol-button" class="btn btn-info">Coin Ekle</button>
+                    <button id="remove-symbol-button" class="btn btn-warning">Coin Çıkar</button>
                 </div>
             </div>
 
+            <!-- İZLENEN COİNLER LİSTESİ -->
+            <div class="card symbols-card" id="symbols-card" style="display: none;">
+                <h2>📊 İzlenen Coinler & Son Sinyaller</h2>
+                <div id="symbols-list" class="symbols-grid">
+                    <!-- Dinamik olarak doldurulacak -->
+                </div>
+            </div>
+
+            <!-- POZİSYON YÖNETİMİ -->
+            <div class="card controls-card">
+                <h2>🛡️ Pozisyon Koruması</h2>
+                <p class="subtitle">Manuel işlemler ve bot dışı coinler için TP/SL koruması</p>
+                <div class="button-group">
+                    <button id="scan-all-button" class="btn btn-info">Tüm Pozisyonları Tara</button>
+                    <button id="monitor-toggle-button" class="btn btn-secondary">TP/SL Monitor</button>
+                </div>
+                <div class="form-group">
+                    <label for="scan-symbol-input">Belirli Coin için TP/SL Kontrolü</label>
+                    <input type="text" id="scan-symbol-input" placeholder="Örn: BTCUSDT">
+                </div>
+                <button id="scan-symbol-button" class="btn btn-info">Coin Kontrol Et</button>
+            </div>
+
+            <!-- PERFORMANS İSTATİSTİKLERİ -->
             <div class="card stats-card">
-                <h2>Performans İstatistikleri</h2>
+                <h2>📈 Performans İstatistikleri</h2>
                 <div class="stats-grid">
                     <p class="stats-label">Toplam İşlem:</p>
                     <p class="stats-value" id="stats-total-trades">0</p>
@@ -90,6 +130,20 @@
                     <p class="stats-value" id="stats-net-pnl">0.00 USDT</p>
                 </div>
             </div>
+
+            <!-- GERİYE UYUMLULUK - TEK COİN MODU -->
+            <div class="card controls-card legacy-card">
+                <h2>🔄 Tek Coin Modu (Geriye Uyumluluk)</h2>
+                <p class="subtitle">Eski arayüz - artık multi-coin olarak çalışır</p>
+                <div class="form-group">
+                    <label for="legacy-symbol-input">Tek Coin</label>
+                    <input type="text" id="legacy-symbol-input" placeholder="Örn: BTCUSDT">
+                </div>
+                <div class="button-group">
+                    <button id="legacy-start-button" class="btn btn-secondary">Tek Coin Başlat</button>
+                </div>
+            </div>
+
         </main>
     </div>
 
