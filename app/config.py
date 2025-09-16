@@ -14,13 +14,13 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri ---
-    LEVERAGE: int = 3
+    LEVERAGE: int = 20
     ORDER_SIZE_USDT: float = 35.0
-    TIMEFRAME: str = "3m"
+    TIMEFRAME: str = "15m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     STOP_LOSS_PERCENT: float = 0.009   # %0.9 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.004 # %0.4 Kar Al
+    TAKE_PROFIT_PERCENT: float = 0.01 # %0.4 Kar Al
     
     # 🛡️ --- SAHTE SİNYAL KORUMASI AYARLARI ---
     
