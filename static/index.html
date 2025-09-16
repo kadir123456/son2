@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Coin Bot</title>
+    <title>Gelişmiş Multi-Coin Bot v4.0</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,8 +13,8 @@
 
     <div id="login-container" class="container">
         <div class="card login-card">
-            <h1>Multi-Coin Bot Kontrol Paneli</h1>
-            <p class="subtitle">Lütfen giriş yapın</p>
+            <h1>🚀 Gelişmiş Multi-Coin Bot v4.0</h1>
+            <p class="subtitle">Dinamik TP/SL & Gelişmiş Risk Yönetimi</p>
             <div class="form-group">
                 <label for="email">E-posta</label>
                 <input type="email" id="email" placeholder="ornek@mail.com" autocomplete="email">
@@ -30,7 +30,7 @@
 
     <div id="app-container" class="container" style="display: none;">
         <header>
-            <h1>Multi-Coin Bot v3.0</h1>
+            <h1>🚀 Gelişmiş Multi-Coin Bot v4.0</h1>
             <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
@@ -43,14 +43,16 @@
                     <p class="stats-value" id="stats-main-balance">Yükleniyor...</p>
                     <p class="stats-label">İşlemdeki Pozisyon P&L:</p>
                     <p class="stats-value" id="stats-position-pnl">Yükleniyor...</p>
+                    <p class="stats-label">Günlük P&L:</p>
+                    <p class="stats-value" id="stats-daily-pnl">Yükleniyor...</p>
                     <p class="stats-label">İşlemdeki Miktar (USDT):</p>
                     <p class="stats-value" id="stats-order-size">Yükleniyor...</p>
                 </div>
             </div>
 
-            <!-- MULTI-COIN BOT DURUMU -->
+            <!-- GELİŞMİŞ BOT DURUMU -->
             <div class="card status-card">
-                <h2>🤖 Multi-Coin Bot Durumu</h2>
+                <h2>🤖 Gelişmiş Bot Durumu</h2>
                 <div class="status-grid">
                     <p class="status-label">Durum:</p>
                     <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
@@ -58,14 +60,42 @@
                     <p class="status-value"><span id="monitored-symbols">Hayır</span></p>
                     <p class="status-label">Aktif Pozisyon:</p>
                     <p class="status-value"><span id="active-position">Hayır</span></p>
+                    <p class="status-label">Zaman Dilimi:</p>
+                    <p class="status-value"><span id="current-timeframe">15m</span></p>
+                    <p class="status-label">Risk/Reward:</p>
+                    <p class="status-value"><span id="risk-reward-ratio">1:1.5</span></p>
                     <p class="status-label">WebSocket Bağlantıları:</p>
                     <p class="status-value"><span id="websocket-count">0</span></p>
                 </div>
             </div>
 
-            <!-- COIN YÖNETİMİ -->
+            <!-- ZAMAN DİLİMİ VE COİN YÖNETİMİ -->
             <div class="card controls-card">
-                <h2>🎯 Coin Yönetimi</h2>
+                <h2>🕐 Zaman Dilimi & Coin Yönetimi</h2>
+                
+                <!-- Zaman Dilimi Seçimi -->
+                <div class="form-group">
+                    <label for="timeframe-select">Zaman Dilimi Seçin</label>
+                    <select id="timeframe-select" class="form-select">
+                        <option value="1m">1 Dakika (Scalping)</option>
+                        <option value="3m">3 Dakika</option>
+                        <option value="5m">5 Dakika</option>
+                        <option value="15m" selected>15 Dakika (Varsayılan)</option>
+                        <option value="30m">30 Dakika</option>
+                        <option value="1h">1 Saat (Swing)</option>
+                    </select>
+                </div>
+                
+                <!-- Dinamik TP/SL Bilgisi -->
+                <div id="timeframe-info" class="info-panel">
+                    <h3>📊 Seçili Zaman Dilimi Bilgileri</h3>
+                    <div class="timeframe-stats">
+                        <p><strong>Stop Loss:</strong> <span id="tf-stop-loss">0.40%</span></p>
+                        <p><strong>Take Profit:</strong> <span id="tf-take-profit">0.60%</span></p>
+                        <p><strong>Risk/Reward:</strong> <span id="tf-risk-reward">1:1.5</span></p>
+                        <p><strong>Soğuma Süresi:</strong> <span id="tf-cooldown">15 dakika</span></p>
+                    </div>
+                </div>
                 
                 <!-- Multi-Coin Başlatma -->
                 <div class="form-group">
@@ -74,7 +104,7 @@
                            title="Örnek: BTC, ETH, ADA, SOL, DOT">
                 </div>
                 <div class="button-group">
-                    <button id="multi-start-button" class="btn btn-start">Multi-Coin Bot Başlat</button>
+                    <button id="enhanced-start-button" class="btn btn-start">Gelişmiş Bot Başlat</button>
                     <button id="stop-button" class="btn btn-stop" disabled>Bot Durdur</button>
                 </div>
 
@@ -94,6 +124,30 @@
                 <h2>📊 İzlenen Coinler & Son Sinyaller</h2>
                 <div id="symbols-list" class="symbols-grid">
                     <!-- Dinamik olarak doldurulacak -->
+                </div>
+            </div>
+
+            <!-- RİSK YÖNETİMİ PANELİ -->
+            <div class="card risk-card">
+                <h2>🛡️ Risk Yönetimi Paneli</h2>
+                <div class="risk-grid">
+                    <div class="risk-item">
+                        <h3>Günlük Limitler</h3>
+                        <p>Pozisyon: <span id="daily-positions">0</span>/<span id="max-daily-positions">8</span></p>
+                        <div class="progress-bar">
+                            <div id="daily-positions-progress" class="progress-fill"></div>
+                        </div>
+                    </div>
+                    <div class="risk-item">
+                        <h3>Filtrelenen Sinyaller</h3>
+                        <p>Toplam: <span id="filtered-signals-count">0</span></p>
+                        <p class="risk-description">Sahtekar sinyalleri engellendi</p>
+                    </div>
+                    <div class="risk-item">
+                        <h3>Risk Koruması</h3>
+                        <p>Durum: <span id="risk-protection-status">Aktif</span></p>
+                        <p class="risk-description">Gelişmiş filtreler çalışıyor</p>
+                    </div>
                 </div>
             </div>
 
@@ -131,10 +185,69 @@
                 </div>
             </div>
 
+            <!-- FİLTRE İSTATİSTİKLERİ -->
+            <div class="card filters-card" id="filters-card" style="display: none;">
+                <h2>🛡️ Gelişmiş Filtre İstatistikleri</h2>
+                <div class="filters-grid">
+                    <div class="filter-item">
+                        <h3>📊 Trend Filtresi</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Ana trend ile uyumlu sinyaller</p>
+                    </div>
+                    <div class="filter-item">
+                        <h3>⚡ Momentum Filtresi</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Güçlü momentum gerektiriyor</p>
+                    </div>
+                    <div class="filter-item">
+                        <h3>💪 Trend Gücü</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Zayıf trendleri filtreler</p>
+                    </div>
+                    <div class="filter-item">
+                        <h3>🔄 RSI Filtresi</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Aşırı alım/satım koruması</p>
+                    </div>
+                    <div class="filter-item">
+                        <h3>📊 Hacim Filtresi</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Düşük hacimli sinyalleri engeller</p>
+                    </div>
+                    <div class="filter-item">
+                        <h3>⏳ Soğuma Filtresi</h3>
+                        <p class="filter-status active">✅ Aktif</p>
+                        <p class="filter-description">Whipsaw koruması</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ZAMAN DİLİMİ KARŞILAŞTIRMA -->
+            <div class="card comparison-card" id="comparison-card" style="display: none;">
+                <h2>⚖️ Zaman Dilimi Karşılaştırma</h2>
+                <div class="comparison-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Zaman Dilimi</th>
+                                <th>Stop Loss</th>
+                                <th>Take Profit</th>
+                                <th>Risk/Reward</th>
+                                <th>Soğuma</th>
+                                <th>Önerilen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparison-table-body">
+                            <!-- Dinamik olarak doldurulacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- GERİYE UYUMLULUK - TEK COİN MODU -->
             <div class="card controls-card legacy-card">
                 <h2>🔄 Tek Coin Modu (Geriye Uyumluluk)</h2>
-                <p class="subtitle">Eski arayüz - artık multi-coin olarak çalışır</p>
+                <p class="subtitle">Eski arayüz - artık gelişmiş özelliklerle çalışır</p>
                 <div class="form-group">
                     <label for="legacy-symbol-input">Tek Coin</label>
                     <input type="text" id="legacy-symbol-input" placeholder="Örn: BTCUSDT">
@@ -146,6 +259,9 @@
 
         </main>
     </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container"></div>
 
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-auth.js"></script>
