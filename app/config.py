@@ -20,7 +20,7 @@ class Settings:
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
     STOP_LOSS_PERCENT: float = 0.009   # %0.9 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.01 # %0.4 Kar Al
+    TAKE_PROFIT_PERCENT: float = 0.006 # %0.4 Kar Al
     
     # 🛡️ --- SAHTE SİNYAL KORUMASI AYARLARI ---
     
