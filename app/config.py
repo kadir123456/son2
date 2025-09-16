@@ -19,9 +19,41 @@ class Settings:
     TIMEFRAME: str = "3m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
-    # CRITICAL: Bu değerler float olmalı, callable değil!
-    STOP_LOSS_PERCENT: float = 0.009   # %0.8 Zarar Durdur
-    TAKE_PROFIT_PERCENT: float = 0.004 # %1.2 Kar Al (optimize edilmiş)
+    STOP_LOSS_PERCENT: float = 0.009   # %0.9 Zarar Durdur
+    TAKE_PROFIT_PERCENT: float = 0.004 # %0.4 Kar Al
+    
+    # 🛡️ --- SAHTE SİNYAL KORUMASI AYARLARI ---
+    
+    # Trend Filtresi
+    TREND_FILTER_ENABLED: bool = True
+    TREND_EMA_PERIOD: int = 50          # Ana trend için EMA(50)
+    
+    # Minimum Fiyat Hareketi Filtresi  
+    MIN_PRICE_MOVEMENT_ENABLED: bool = True
+    MIN_PRICE_MOVEMENT_PERCENT: float = 0.003  # %0.3 minimum hareket
+    
+    # RSI Filtresi (Aşırı alım/satım koruması)
+    RSI_FILTER_ENABLED: bool = True
+    RSI_PERIOD: int = 14
+    RSI_OVERSOLD: float = 30.0         # RSI < 30 = aşırı satım
+    RSI_OVERBOUGHT: float = 70.0       # RSI > 70 = aşırı alım
+    
+    # Sinyal Soğuma Süresi (Whipsaw koruması)
+    SIGNAL_COOLDOWN_ENABLED: bool = True
+    SIGNAL_COOLDOWN_MINUTES: int = 15   # 15 dakika soğuma
+    
+    # Volatilite Filtresi
+    VOLATILITY_FILTER_ENABLED: bool = True
+    ATR_PERIOD: int = 14
+    MIN_ATR_MULTIPLIER: float = 1.5     # ATR * 1.5 minimum volatilite
+    
+    # Hacim Filtresi
+    VOLUME_FILTER_ENABLED: bool = True
+    VOLUME_MA_PERIOD: int = 20
+    MIN_VOLUME_MULTIPLIER: float = 1.2  # Ortalama hacmin 1.2x'i
+    
+    # Sinyal Gücü Threshold
+    SIGNAL_STRENGTH_THRESHOLD: float = 0.0002  # EMA farkı minimum %0.02
     
     # --- Rate Limiting ve Performance Ayarları ---
     MAX_REQUESTS_PER_MINUTE: int = 1200
@@ -64,6 +96,13 @@ class Settings:
         if cls.MAX_REQUESTS_PER_MINUTE > 2000:
             warnings.append(f"⚠️ Dakikada maksimum istek sayısı yüksek: {cls.MAX_REQUESTS_PER_MINUTE}. Rate limit riski!")
         
+        # Sahte sinyal koruması validasyonu
+        if cls.MIN_PRICE_MOVEMENT_PERCENT > 0.01:
+            warnings.append(f"⚠️ Minimum fiyat hareketi çok yüksek: %{cls.MIN_PRICE_MOVEMENT_PERCENT*100}")
+        
+        if cls.SIGNAL_COOLDOWN_MINUTES > 60:
+            warnings.append(f"⚠️ Sinyal soğuma süresi çok uzun: {cls.SIGNAL_COOLDOWN_MINUTES} dakika")
+        
         for warning in warnings:
             print(warning)
         
@@ -72,23 +111,27 @@ class Settings:
     @classmethod
     def print_settings(cls):
         """Mevcut ayarları yazdır"""
-        print("=" * 60)
-        print("🚀 OPTIMIZE EDİLMİŞ BOT AYARLARI")
-        print("=" * 60)
+        print("=" * 70)
+        print("🚀 SAHTE SİNYAL KORUMASLI BOT AYARLARI")
+        print("=" * 70)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
         print(f"💰 İşlem Miktarı: {cls.ORDER_SIZE_USDT} USDT")
         print(f"📈 Kaldıraç: {cls.LEVERAGE}x")
-        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME} ⭐ (Optimize)")
+        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME}")
         print(f"🛑 Stop Loss: %{cls.STOP_LOSS_PERCENT * 100:.1f}")
         print(f"🎯 Take Profit: %{cls.TAKE_PROFIT_PERCENT * 100:.1f}")
-        print(f"📈 Risk/Reward Oranı: 1:{cls.TAKE_PROFIT_PERCENT/cls.STOP_LOSS_PERCENT:.1f}")
-        print(f"🔄 Maks. İstek/Dakika: {cls.MAX_REQUESTS_PER_MINUTE}")
-        print(f"💾 Cache Süreleri: Bakiye={cls.CACHE_DURATION_BALANCE}s, Pozisyon={cls.CACHE_DURATION_POSITION}s")
-        print(f"🌐 WebSocket: Ping={cls.WEBSOCKET_PING_INTERVAL}s, Timeout={cls.WEBSOCKET_PING_TIMEOUT}s")
-        print("=" * 60)
-        print("💡 15m + EMA(9,21) kombinasyonu crypto futures için optimize edilmiştir")
-        print("🎯 Risk/Reward oranı 1:1.5 - optimal kar/zarar dengesi")
-        print("=" * 60)
+        print("=" * 70)
+        print("🛡️ SAHTE SİNYAL KORUMALARI:")
+        print(f"   📊 Trend Filtresi (EMA{cls.TREND_EMA_PERIOD}): {'✅' if cls.TREND_FILTER_ENABLED else '❌'}")
+        print(f"   📈 Min. Fiyat Hareketi (%{cls.MIN_PRICE_MOVEMENT_PERCENT*100:.1f}): {'✅' if cls.MIN_PRICE_MOVEMENT_ENABLED else '❌'}")
+        print(f"   🔄 RSI Filtresi ({cls.RSI_OVERSOLD}-{cls.RSI_OVERBOUGHT}): {'✅' if cls.RSI_FILTER_ENABLED else '❌'}")
+        print(f"   ⏳ Sinyal Soğuma ({cls.SIGNAL_COOLDOWN_MINUTES}dk): {'✅' if cls.SIGNAL_COOLDOWN_ENABLED else '❌'}")
+        print(f"   🌊 Volatilite Filtresi (ATR{cls.ATR_PERIOD}): {'✅' if cls.VOLATILITY_FILTER_ENABLED else '❌'}")
+        print(f"   📊 Hacim Filtresi ({cls.MIN_VOLUME_MULTIPLIER}x): {'✅' if cls.VOLUME_FILTER_ENABLED else '❌'}")
+        print("=" * 70)
+        print("💡 Bu korumalar yatay piyasalarda sahte sinyalleri engeller")
+        print("🎯 Whipsaw (testere) hareketlerinden korunma aktif")
+        print("=" * 70)
 
 settings = Settings()
 
