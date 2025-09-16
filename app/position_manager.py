@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from .binance_client import binance_client
 from .config import settings
 
