@@ -1,4 +1,4 @@
-# app/main.py - MULTI-COIN DESTEKLİ VERSİYON
+# app/main.py - GELIŞMIŞ MULTI-COIN VE ZAMAN DİLİMİ SEÇİMİ DESTEKLİ VERSİYON
 
 import asyncio
 import time
@@ -7,7 +7,7 @@ from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from .bot_core import bot_core
 from .config import settings
 from .firebase_manager import firebase_manager
@@ -39,7 +39,7 @@ class RateLimiter:
         self.requests[client_id].append(current_time)
         return True
 
-rate_limiter = RateLimiter(max_requests=30, time_window=60)
+rate_limiter = RateLimiter(max_requests=40, time_window=60)  # Biraz daha yüksek limit
 
 async def authenticate(token: str = Depends(bearer_scheme)):
     """Gelen Firebase ID Token'ını doğrular ve rate limiting uygular."""
@@ -61,12 +61,12 @@ async def authenticate(token: str = Depends(bearer_scheme)):
     print(f"Doğrulanan kullanıcı: {user.get('email')}")
     return user
 
-app = FastAPI(title="Multi-Coin Binance Futures Bot", version="3.0.0")
+app = FastAPI(title="Enhanced Multi-Coin Binance Futures Bot", version="4.0.0")
 
 @app.on_event("startup")
 async def startup_event():
     """Uygulama başlangıcında ayarları doğrula"""
-    print("🚀 Multi-Coin Bot başlatılıyor...")
+    print("🚀 Gelişmiş Multi-Coin Bot başlatılıyor...")
     settings.validate_settings()
     settings.print_settings()
 
@@ -76,9 +76,13 @@ async def shutdown_event():
         await bot_core.stop()
     await position_manager.stop_monitoring()
 
-# ============ YENİ MODEL'LER - MULTI-COIN ============
-class MultiStartRequest(BaseModel):
+# ============ YENİ MODEL'LER - GELİŞMİŞ ÖZELLİKLER ============
+class EnhancedMultiStartRequest(BaseModel):
     symbols: List[str]  # Birden fazla symbol
+    timeframe: Optional[str] = "15m"  # YENİ: Zaman dilimi seçimi
+
+class TimeframeChangeRequest(BaseModel):
+    timeframe: str
 
 class AddSymbolRequest(BaseModel):
     symbol: str
@@ -89,11 +93,16 @@ class RemoveSymbolRequest(BaseModel):
 class SymbolRequest(BaseModel):
     symbol: str
 
-# ============ MULTI-COIN ENDPOINT'LER ============
+class RiskSettingsRequest(BaseModel):
+    max_daily_positions: Optional[int] = None
+    max_daily_loss_percent: Optional[float] = None
+    max_consecutive_losses: Optional[int] = None
 
-@app.post("/api/multi-start")
-async def start_multi_bot(request: MultiStartRequest, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
-    """Birden fazla coin ile bot başlat"""
+# ============ GELİŞMİŞ MULTI-COIN ENDPOINT'LER ============
+
+@app.post("/api/enhanced-multi-start")
+async def start_enhanced_multi_bot(request: EnhancedMultiStartRequest, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
+    """Gelişmiş özelliklerle birden fazla coin ve zaman dilimi ile bot başlat"""
     if bot_core.status["is_running"]:
         raise HTTPException(status_code=400, detail="Bot zaten çalışıyor.")
     
@@ -102,6 +111,14 @@ async def start_multi_bot(request: MultiStartRequest, background_tasks: Backgrou
     
     if len(request.symbols) > 20:
         raise HTTPException(status_code=400, detail="Maksimum 20 symbol desteklenir.")
+    
+    # Zaman dilimini kontrol et
+    available_timeframes = bot_core.get_available_timeframes()
+    if request.timeframe not in available_timeframes:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Geçersiz zaman dilimi: {request.timeframe}. Desteklenenler: {', '.join(available_timeframes)}"
+        )
     
     # Symbolları normalize et
     normalized_symbols = []
@@ -116,11 +133,57 @@ async def start_multi_bot(request: MultiStartRequest, background_tasks: Backgrou
         if symbol not in normalized_symbols:  # Duplicate kontrolü
             normalized_symbols.append(symbol)
     
-    print(f"👤 {user.get('email')} tarafından multi-coin bot başlatılıyor: {', '.join(normalized_symbols)}")
+    print(f"👤 {user.get('email')} tarafından gelişmiş multi-coin bot başlatılıyor:")
+    print(f"   📊 Coinler: {', '.join(normalized_symbols)}")
+    print(f"   🕐 Zaman dilimi: {request.timeframe}")
     
-    background_tasks.add_task(bot_core.start, normalized_symbols)
+    background_tasks.add_task(bot_core.start, normalized_symbols, request.timeframe)
     await asyncio.sleep(2)
     return bot_core.get_multi_status()
+
+@app.post("/api/change-timeframe")
+async def change_timeframe(request: TimeframeChangeRequest, user: dict = Depends(authenticate)):
+    """Zaman dilimini değiştir (bot durdurulmuşken)"""
+    result = await bot_core.change_timeframe(request.timeframe)
+    if result["success"]:
+        return {
+            "success": True,
+            "message": result["message"],
+            "new_settings": result["new_settings"],
+            "user": user.get('email'),
+            "timestamp": time.time()
+        }
+    else:
+        raise HTTPException(status_code=400, detail=result["message"])
+
+@app.get("/api/timeframe-info")
+async def get_timeframe_info(user: dict = Depends(authenticate)):
+    """Zaman dilimi bilgilerini döndür"""
+    current_timeframe = settings.TIMEFRAME
+    current_settings = settings.get_current_settings()
+    
+    return {
+        "current_timeframe": current_timeframe,
+        "available_timeframes": bot_core.get_available_timeframes(),
+        "current_settings": {
+            "stop_loss_percent": current_settings["stop_loss_percent"] * 100,
+            "take_profit_percent": current_settings["take_profit_percent"] * 100,
+            "risk_reward_ratio": settings.get_risk_reward_ratio(),
+            "cooldown_minutes": current_settings["cooldown_minutes"],
+            "min_price_movement": current_settings["min_price_movement"] * 100,
+            "signal_strength": current_settings["signal_strength"],
+            "atr_multiplier": current_settings["atr_multiplier"]
+        },
+        "timeframe_comparison": {
+            tf: {
+                "stop_loss": settings.TIMEFRAME_SETTINGS[tf]["stop_loss_percent"] * 100,
+                "take_profit": settings.TIMEFRAME_SETTINGS[tf]["take_profit_percent"] * 100,
+                "risk_reward": settings.TIMEFRAME_SETTINGS[tf]["take_profit_percent"] / settings.TIMEFRAME_SETTINGS[tf]["stop_loss_percent"],
+                "cooldown_minutes": settings.TIMEFRAME_SETTINGS[tf]["cooldown_minutes"]
+            }
+            for tf in settings.TIMEFRAME_SETTINGS.keys()
+        }
+    }
 
 @app.post("/api/add-symbol")
 async def add_symbol_to_bot(request: AddSymbolRequest, user: dict = Depends(authenticate)):
@@ -146,6 +209,7 @@ async def add_symbol_to_bot(request: AddSymbolRequest, user: dict = Depends(auth
             "success": True,
             "message": result["message"],
             "current_symbols": bot_core.status["symbols"],
+            "current_timeframe": bot_core.status["current_timeframe"],
             "user": user.get('email'),
             "timestamp": time.time()
         }
@@ -173,30 +237,71 @@ async def remove_symbol_from_bot(request: RemoveSymbolRequest, user: dict = Depe
             "success": True,
             "message": result["message"],
             "current_symbols": bot_core.status["symbols"],
+            "current_timeframe": bot_core.status["current_timeframe"],
             "user": user.get('email'),
             "timestamp": time.time()
         }
     else:
         raise HTTPException(status_code=400, detail=result["message"])
 
-@app.get("/api/multi-status")
-async def get_multi_status(user: dict = Depends(authenticate)):
-    """Multi-coin bot durumunu döndür"""
+@app.get("/api/enhanced-status")
+async def get_enhanced_status(user: dict = Depends(authenticate)):
+    """Gelişmiş multi-coin bot durumunu döndür"""
     return bot_core.get_multi_status()
 
-# ============ GERİYE UYUMLULUK - ESKİ ENDPOINT'LER ============
+@app.get("/api/risk-management-status")
+async def get_risk_management_status(user: dict = Depends(authenticate)):
+    """Risk yönetimi durumunu detaylı döndür"""
+    from .trading_strategy import trading_strategy
+    
+    status = bot_core.get_multi_status()
+    risk_info = {
+        "current_settings": {
+            "max_daily_positions": settings.MAX_DAILY_POSITIONS,
+            "max_daily_loss_percent": settings.MAX_DAILY_LOSS_PERCENT * 100,
+            "max_consecutive_losses": settings.MAX_CONSECUTIVE_LOSSES,
+            "min_risk_reward_ratio": settings.MIN_RISK_REWARD_RATIO
+        },
+        "current_status": {
+            "daily_positions": status.get("daily_positions", 0),
+            "daily_pnl": status.get("daily_pnl", 0.0),
+            "account_balance": status.get("account_balance", 0.0),
+            "risk_management_active": status.get("risk_management_active", False)
+        },
+        "symbol_details": {}
+    }
+    
+    # Her symbol için detay
+    for symbol in status.get("symbols", []):
+        filter_status = trading_strategy.get_filter_status(symbol)
+        risk_info["symbol_details"][symbol] = filter_status
+    
+    return risk_info
+
+# ============ UYUMLULUK - ESKİ ENDPOINT'LER ============
+
+@app.post("/api/multi-start")
+async def start_multi_bot(request: dict, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
+    """Eski multi-start endpoint'i - geriye uyumluluk"""
+    symbols = request.get("symbols", [])
+    timeframe = request.get("timeframe", "15m")
+    
+    enhanced_request = EnhancedMultiStartRequest(symbols=symbols, timeframe=timeframe)
+    return await start_enhanced_multi_bot(enhanced_request, background_tasks, user)
 
 @app.post("/api/start")
 async def start_bot(request: dict, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
     """Tek symbol için geriye uyumluluk - artık multi-coin olarak çalışır"""
     symbol = request.get("symbol", "").upper().strip()
+    timeframe = request.get("timeframe", "15m")
+    
     if not symbol.endswith('USDT'):
         symbol += 'USDT'
     
-    print(f"👤 {user.get('email')} tarafından tek symbol bot başlatılıyor: {symbol} (multi-coin modunda)")
+    print(f"👤 {user.get('email')} tarafından tek symbol bot başlatılıyor: {symbol} ({timeframe})")
     
     # Tek symbol'ü liste olarak gönder
-    background_tasks.add_task(bot_core.start, [symbol])
+    background_tasks.add_task(bot_core.start, [symbol], timeframe)
     await asyncio.sleep(2)
     
     # Eski format için uyumlu response
@@ -209,7 +314,8 @@ async def start_bot(request: dict, background_tasks: BackgroundTasks, user: dict
         "account_balance": status["account_balance"],
         "position_pnl": status["position_pnl"],
         "order_size": status["order_size"],
-        "position_monitor_active": status["position_monitor_active"]
+        "position_monitor_active": status["position_monitor_active"],
+        "current_timeframe": status["current_timeframe"]
     }
 
 @app.post("/api/stop")
@@ -234,8 +340,14 @@ async def get_status(user: dict = Depends(authenticate)):
         "position_pnl": status["position_pnl"],
         "order_size": status["order_size"],
         "position_monitor_active": status["position_monitor_active"],
-        "position_manager": status["position_manager"]
+        "position_manager": status["position_manager"],
+        "current_timeframe": status["current_timeframe"]
     }
+
+@app.get("/api/multi-status")
+async def get_multi_status(user: dict = Depends(authenticate)):
+    """Multi-coin bot durumunu döndür - yönlendirme"""
+    return await get_enhanced_status(user)
 
 @app.get("/api/health")
 async def health_check():
@@ -248,10 +360,11 @@ async def health_check():
         "active_symbol": bot_core.status["active_symbol"],
         "position_monitor_running": position_manager.is_running,
         "websocket_connections": len(bot_core._websocket_connections),
-        "version": "3.0.0"
+        "current_timeframe": bot_core.status.get("current_timeframe", "15m"),
+        "version": "4.0.0"
     }
 
-# ============ POZISYON YÖNETİMİ ENDPOINT'LERİ ============
+# ============ POZİSYON YÖNETİMİ ENDPOINT'LERİ ============
 
 @app.post("/api/scan-all-positions")
 async def scan_all_positions(user: dict = Depends(authenticate)):
@@ -268,7 +381,8 @@ async def scan_all_positions(user: dict = Depends(authenticate)):
             "message": result["message"],
             "user": user.get('email'),
             "timestamp": time.time(),
-            "monitor_status": result.get("monitor_status")
+            "monitor_status": result.get("monitor_status"),
+            "current_timeframe": bot_core.status.get("current_timeframe")
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pozisyon tarama hatası: {e}")
@@ -292,7 +406,8 @@ async def scan_specific_symbol(request: SymbolRequest, user: dict = Depends(auth
             "symbol": result["symbol"],
             "message": result["message"],
             "user": user.get('email'),
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "current_timeframe": bot_core.status.get("current_timeframe")
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{symbol} kontrolü hatası: {e}")
@@ -305,6 +420,7 @@ async def get_position_monitor_status(user: dict = Depends(authenticate)):
     return {
         "monitor_status": position_manager.get_status(),
         "bot_status": bot_core.status["is_running"],
+        "current_timeframe": bot_core.status.get("current_timeframe"),
         "timestamp": time.time()
     }
 
@@ -328,6 +444,7 @@ async def start_position_monitor(background_tasks: BackgroundTasks, user: dict =
             "message": "Otomatik TP/SL monitoring başlatıldı",
             "monitor_status": position_manager.get_status(),
             "user": user.get('email'),
+            "current_timeframe": bot_core.status.get("current_timeframe"),
             "timestamp": time.time()
         }
     except Exception as e:
@@ -355,6 +472,58 @@ async def stop_position_monitor(user: dict = Depends(authenticate)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Monitor durdurma hatası: {e}")
+
+# ============ YENİ: GELİŞMİŞ ANALİZ ENDPOINT'LERİ ============
+
+@app.get("/api/filter-statistics")
+async def get_filter_statistics(user: dict = Depends(authenticate)):
+    """Filtre istatistiklerini döndür"""
+    from .trading_strategy import trading_strategy
+    
+    stats = {
+        "total_filtered_signals": bot_core.status.get("filtered_signals_count", 0),
+        "active_filters": {
+            "trend_filter": settings.TREND_FILTER_ENABLED,
+            "momentum_filter": settings.MOMENTUM_FILTER_ENABLED,
+            "trend_strength_filter": settings.TREND_STRENGTH_FILTER_ENABLED,
+            "price_movement_filter": settings.MIN_PRICE_MOVEMENT_ENABLED,
+            "rsi_filter": settings.RSI_FILTER_ENABLED,
+            "cooldown_filter": settings.SIGNAL_COOLDOWN_ENABLED,
+            "volatility_filter": settings.VOLATILITY_FILTER_ENABLED,
+            "volume_filter": settings.VOLUME_FILTER_ENABLED
+        },
+        "symbol_statistics": {}
+    }
+    
+    # Her symbol için detaylı istatistik
+    for symbol in bot_core.status.get("symbols", []):
+        stats["symbol_statistics"][symbol] = trading_strategy.get_filter_status(symbol)
+    
+    return stats
+
+@app.get("/api/performance-metrics")
+async def get_performance_metrics(user: dict = Depends(authenticate)):
+    """Performans metriklerini döndür"""
+    return {
+        "bot_status": {
+            "is_running": bot_core.status["is_running"],
+            "uptime_seconds": time.time() - (bot_core.status.get("start_time", time.time())),
+            "current_timeframe": bot_core.status.get("current_timeframe"),
+            "symbols_count": len(bot_core.status.get("symbols", [])),
+            "websocket_connections": len(bot_core._websocket_connections)
+        },
+        "risk_metrics": {
+            "daily_positions": bot_core.status.get("daily_positions", 0),
+            "daily_pnl": bot_core.status.get("daily_pnl", 0.0),
+            "current_balance": bot_core.status.get("account_balance", 0.0),
+            "position_pnl": bot_core.status.get("position_pnl", 0.0)
+        },
+        "signal_metrics": {
+            "filtered_signals": bot_core.status.get("filtered_signals_count", 0),
+            "active_signals": len([s for s in bot_core.status.get("last_signals", {}).values() if s != "HOLD"])
+        },
+        "timestamp": time.time()
+    }
 
 # ============ STATIC FILES ============
 
