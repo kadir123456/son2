@@ -7,6 +7,7 @@ from .trading_strategy import trading_strategy
 from .firebase_manager import firebase_manager
 from .position_manager import position_manager
 from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List
 import math
 import time
 import traceback
