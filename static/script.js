@@ -24,9 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordInput = document.getElementById('password');
     const loginError = document.getElementById('login-error');
     
-    // HTML elementleri - Multi-Coin Yeni
+    // HTML elementleri - Gelişmiş Özellikler
+    const timeframeSelect = document.getElementById('timeframe-select');
+    const enhancedStartButton = document.getElementById('enhanced-start-button');
     const multiSymbolsInput = document.getElementById('multi-symbols-input');
-    const multiStartButton = document.getElementById('multi-start-button');
     const stopButton = document.getElementById('stop-button');
     const singleSymbolInput = document.getElementById('single-symbol-input');
     const addSymbolButton = document.getElementById('add-symbol-button');
@@ -40,7 +41,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusMessageSpan = document.getElementById('status-message');
     const monitoredSymbolsSpan = document.getElementById('monitored-symbols');
     const activePositionSpan = document.getElementById('active-position');
+    const currentTimeframeSpan = document.getElementById('current-timeframe');
+    const riskRewardRatioSpan = document.getElementById('risk-reward-ratio');
     const websocketCountSpan = document.getElementById('websocket-count');
+    
+    // HTML elementleri - Zaman Dilimi Bilgisi
+    const timeframeInfo = document.getElementById('timeframe-info');
+    const tfStopLoss = document.getElementById('tf-stop-loss');
+    const tfTakeProfit = document.getElementById('tf-take-profit');
+    const tfRiskReward = document.getElementById('tf-risk-reward');
+    const tfCooldown = document.getElementById('tf-cooldown');
+    
+    // HTML elementleri - Risk Yönetimi
+    const dailyPositionsSpan = document.getElementById('daily-positions');
+    const maxDailyPositionsSpan = document.getElementById('max-daily-positions');
+    const dailyPositionsProgress = document.getElementById('daily-positions-progress');
+    const filteredSignalsCount = document.getElementById('filtered-signals-count');
+    const riskProtectionStatus = document.getElementById('risk-protection-status');
     
     // HTML elementleri - Pozisyon Yönetimi
     const scanAllButton = document.getElementById('scan-all-button');
@@ -55,6 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // HTML elementleri - İstatistikler
     const statsMainBalance = document.getElementById('stats-main-balance');
     const statsPositionPnl = document.getElementById('stats-position-pnl');
+    const statsDailyPnl = document.getElementById('stats-daily-pnl');
     const statsOrderSize = document.getElementById('stats-order-size');
     const statsTotal = document.getElementById('stats-total-trades');
     const statsWinning = document.getElementById('stats-winning-trades');
@@ -63,26 +81,83 @@ document.addEventListener('DOMContentLoaded', () => {
     const statsTotalLoss = document.getElementById('stats-total-loss');
     const statsNetPnl = document.getElementById('stats-net-pnl');
     
+    // HTML elementleri - Gelişmiş Paneller
+    const filtersCard = document.getElementById('filters-card');
+    const comparisonCard = document.getElementById('comparison-card');
+    const comparisonTableBody = document.getElementById('comparison-table-body');
+    
     let statusInterval;
     let isMonitorRunning = false;
+    let timeframeInfo_data = {};
+
+    // --- TOAST NOTIFICATION SİSTEMİ ---
+    function showNotification(message, type = 'info') {
+        const container = document.getElementById('notification-container') || createNotificationContainer();
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        
+        const icon = {
+            'success': '✅',
+            'error': '❌',
+            'warning': '⚠️',
+            'info': 'ℹ️'
+        }[type] || 'ℹ️';
+        
+        notification.innerHTML = `
+            <span class="notification-icon">${icon}</span>
+            <span class="notification-message">${message}</span>
+            <button class="notification-close" onclick="this.parentElement.remove()">×</button>
+        `;
+        
+        container.appendChild(notification);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 5000);
+        
+        // Animate in
+        setTimeout(() => {
+            notification.classList.add('notification-show');
+        }, 100);
+    }
+    
+    function createNotificationContainer() {
+        const container = document.createElement('div');
+        container.id = 'notification-container';
+        container.className = 'notification-container';
+        document.body.appendChild(container);
+        return container;
+    }
 
     // --- KİMLİK DOĞRULAMA ---
     loginButton.addEventListener('click', () => {
         loginError.textContent = "";
         auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
-            .catch(error => { loginError.textContent = "Hatalı e-posta veya şifre."; });
+            .catch(error => { 
+                loginError.textContent = "Hatalı e-posta veya şifre."; 
+                showNotification('Giriş başarısız', 'error');
+            });
     });
 
-    logoutButton.addEventListener('click', () => { auth.signOut(); });
+    logoutButton.addEventListener('click', () => { 
+        auth.signOut();
+        showNotification('Çıkış yapıldı', 'info');
+    });
 
     auth.onAuthStateChanged(user => {
         if (user) {
             loginContainer.style.display = 'none';
             appContainer.style.display = 'flex';
-            getMultiStatus();
-            statusInterval = setInterval(getMultiStatus, 8000);
+            showNotification(`Hoş geldiniz, ${user.email}`, 'success');
+            getEnhancedStatus();
+            loadTimeframeInfo();
+            statusInterval = setInterval(getEnhancedStatus, 8000);
             listenForTradeUpdates();
             updateMonitorButton();
+            loadFilterStatistics();
         } else {
             loginContainer.style.display = 'flex';
             appContainer.style.display = 'none';
@@ -102,30 +177,95 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ detail: response.statusText }));
                 console.error("API Hatası:", errorData.detail);
-                showError(errorData.detail);
+                showNotification(errorData.detail, 'error');
                 return null;
             }
             return response.json();
         } catch (error) { 
             console.error("API isteği hatası:", error); 
-            showError("Bağlantı hatası: " + error.message);
+            showNotification("Bağlantı hatası: " + error.message, 'error');
             return null; 
         }
     }
 
-    function showError(message) {
-        // Basit error notification
-        console.error("HATA:", message);
-        // Gelecekte toast notification eklenebilir
-    }
-
-    function showSuccess(message) {
-        console.log("BAŞARILI:", message);
-        // Gelecekte toast notification eklenebilir
+    // --- ZAMAN DİLİMİ YÖNETİMİ ---
+    async function loadTimeframeInfo() {
+        try {
+            const data = await fetchApi('/api/timeframe-info');
+            if (data) {
+                timeframeInfo_data = data;
+                updateTimeframeDisplay(data.current_timeframe);
+                loadTimeframeComparison(data.timeframe_comparison);
+            }
+        } catch (error) {
+            console.error("Zaman dilimi bilgisi yüklenemedi:", error);
+        }
     }
     
-    // --- MULTI-COIN UI GÜNCELLEMESI ---
-    const updateMultiUI = (data) => {
+    function updateTimeframeDisplay(selectedTimeframe = null) {
+        const timeframe = selectedTimeframe || timeframeSelect.value;
+        
+        if (timeframeInfo_data.timeframe_comparison && timeframeInfo_data.timeframe_comparison[timeframe]) {
+            const settings = timeframeInfo_data.timeframe_comparison[timeframe];
+            
+            tfStopLoss.textContent = `${settings.stop_loss.toFixed(2)}%`;
+            tfTakeProfit.textContent = `${settings.take_profit.toFixed(2)}%`;
+            tfRiskReward.textContent = `1:${settings.risk_reward.toFixed(1)}`;
+            tfCooldown.textContent = `${settings.cooldown_minutes} dakika`;
+            
+            // Progress bar renkleri
+            const rr = settings.risk_reward;
+            if (rr >= 2.0) {
+                timeframeInfo.className = 'info-panel excellent';
+            } else if (rr >= 1.5) {
+                timeframeInfo.className = 'info-panel good';
+            } else {
+                timeframeInfo.className = 'info-panel warning';
+            }
+        }
+    }
+    
+    function loadTimeframeComparison(comparisonData) {
+        comparisonTableBody.innerHTML = '';
+        
+        const timeframes = ['1m', '3m', '5m', '15m', '30m', '1h'];
+        const recommendations = {
+            '1m': 'Scalping (Riskli)',
+            '3m': 'Kısa Vade',
+            '5m': 'Hızlı İşlem',
+            '15m': 'Optimal',
+            '30m': 'Orta Vade',
+            '1h': 'Swing Trading'
+        };
+        
+        timeframes.forEach(tf => {
+            if (comparisonData[tf]) {
+                const data = comparisonData[tf];
+                const row = document.createElement('tr');
+                row.className = tf === timeframeInfo_data.current_timeframe ? 'current-timeframe' : '';
+                
+                row.innerHTML = `
+                    <td><strong>${tf.toUpperCase()}</strong></td>
+                    <td>${data.stop_loss.toFixed(2)}%</td>
+                    <td>${data.take_profit.toFixed(2)}%</td>
+                    <td>1:${data.risk_reward.toFixed(1)}</td>
+                    <td>${data.cooldown_minutes}dk</td>
+                    <td>${recommendations[tf]}</td>
+                `;
+                
+                comparisonTableBody.appendChild(row);
+            }
+        });
+        
+        comparisonCard.style.display = 'block';
+    }
+
+    timeframeSelect.addEventListener('change', () => {
+        updateTimeframeDisplay();
+    });
+    
+    // --- GELİŞMİŞ UI GÜNCELLEMESI ---
+    const updateEnhancedUI = (data) => {
         if (!data) return;
         
         // Durum mesajı
@@ -155,30 +295,51 @@ document.addEventListener('DOMContentLoaded', () => {
             activePositionSpan.className = '';
         }
         
+        // Zaman dilimi bilgisi
+        if (data.current_timeframe) {
+            currentTimeframeSpan.textContent = data.current_timeframe.toUpperCase();
+            currentTimeframeSpan.className = 'status-timeframe';
+            timeframeSelect.value = data.current_timeframe;
+        }
+        
+        // Risk/Reward oranı
+        if (data.risk_management && data.risk_management.risk_reward_ratio) {
+            const rr = data.risk_management.risk_reward_ratio;
+            riskRewardRatioSpan.textContent = `1:${rr.toFixed(1)}`;
+            riskRewardRatioSpan.className = rr >= 2.0 ? 'ratio-excellent' : rr >= 1.5 ? 'ratio-good' : 'ratio-warning';
+        }
+        
         // WebSocket bağlantıları
         websocketCountSpan.textContent = data.websocket_connections || 0;
         
+        // Risk yönetimi bilgileri
+        updateRiskManagementUI(data);
+        
         // Bot kontrolleri
         if (data.is_running) {
-            multiStartButton.disabled = true;
+            enhancedStartButton.disabled = true;
             legacyStartButton.disabled = true;
             stopButton.disabled = false;
             multiSymbolsInput.disabled = true;
             legacySymbolInput.disabled = true;
+            timeframeSelect.disabled = true;
             
             // Coin yönetimi göster
             coinManagement.style.display = 'block';
             coinButtons.style.display = 'flex';
+            filtersCard.style.display = 'block';
         } else {
-            multiStartButton.disabled = false;
+            enhancedStartButton.disabled = false;
             legacyStartButton.disabled = false;
             stopButton.disabled = true;
             multiSymbolsInput.disabled = false;
             legacySymbolInput.disabled = false;
+            timeframeSelect.disabled = false;
             
             // Coin yönetimi gizle
             coinManagement.style.display = 'none';
             coinButtons.style.display = 'none';
+            filtersCard.style.display = 'none';
         }
         
         // Finansal veriler
@@ -196,6 +357,13 @@ document.addEventListener('DOMContentLoaded', () => {
             statsPositionPnl.className = 'stats-value';
         }
 
+        if (data.is_running && data.daily_pnl !== undefined) {
+            formatPnl(statsDailyPnl, data.daily_pnl);
+        } else {
+            statsDailyPnl.textContent = 'N/A';
+            statsDailyPnl.className = 'stats-value';
+        }
+
         if (data.is_running && data.order_size !== undefined) {
             statsOrderSize.textContent = `${data.order_size.toFixed(2)} USDT`;
             statsOrderSize.className = 'stats-value';
@@ -204,6 +372,36 @@ document.addEventListener('DOMContentLoaded', () => {
             statsOrderSize.className = 'stats-value';
         }
     };
+    
+    function updateRiskManagementUI(data) {
+        // Günlük pozisyon bilgisi
+        const dailyPositions = data.daily_positions || 0;
+        const maxDailyPositions = data.risk_management?.max_daily_positions || 8;
+        
+        dailyPositionsSpan.textContent = dailyPositions;
+        maxDailyPositionsSpan.textContent = maxDailyPositions;
+        
+        // Progress bar güncelle
+        const progressPercent = (dailyPositions / maxDailyPositions) * 100;
+        dailyPositionsProgress.style.width = `${Math.min(progressPercent, 100)}%`;
+        dailyPositionsProgress.className = 'progress-fill';
+        
+        if (progressPercent >= 90) {
+            dailyPositionsProgress.classList.add('progress-danger');
+        } else if (progressPercent >= 70) {
+            dailyPositionsProgress.classList.add('progress-warning');
+        } else {
+            dailyPositionsProgress.classList.add('progress-success');
+        }
+        
+        // Filtrelenen sinyaller
+        filteredSignalsCount.textContent = data.filtered_signals_count || 0;
+        
+        // Risk koruması durumu
+        const riskActive = data.risk_management_active !== false;
+        riskProtectionStatus.textContent = riskActive ? 'Aktif' : 'Pasif';
+        riskProtectionStatus.className = riskActive ? 'status-active' : 'status-inactive';
+    }
 
     function updateSymbolsList(symbols, lastSignals, activeSymbol) {
         symbolsList.innerHTML = '';
@@ -228,13 +426,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const getMultiStatus = async () => updateMultiUI(await fetchApi('/api/multi-status'));
+    const getEnhancedStatus = async () => updateEnhancedUI(await fetchApi('/api/enhanced-status'));
 
-    // --- MULTI-COIN EVENT LISTENERS ---
-    multiStartButton.addEventListener('click', async () => {
+    // --- GELİŞMİŞ MULTI-COIN EVENT LISTENERS ---
+    enhancedStartButton.addEventListener('click', async () => {
         const symbolsInput = multiSymbolsInput.value.trim();
+        const selectedTimeframe = timeframeSelect.value;
+        
         if (!symbolsInput) {
-            showError('Lütfen en az bir coin sembolü girin.');
+            showNotification('Lütfen en az bir coin sembolü girin.', 'error');
             return;
         }
         
@@ -244,39 +444,41 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(s => s.length > 0);
         
         if (symbols.length === 0) {
-            showError('Geçerli coin sembolleri girin.');
+            showNotification('Geçerli coin sembolleri girin.', 'error');
             return;
         }
         
         if (symbols.length > 20) {
-            showError('Maksimum 20 coin desteklenir.');
+            showNotification('Maksimum 20 coin desteklenir.', 'error');
             return;
         }
         
-        console.log('Multi-coin bot başlatılıyor:', symbols);
-        const result = await fetchApi('/api/multi-start', { 
+        console.log('Gelişmiş multi-coin bot başlatılıyor:', symbols, selectedTimeframe);
+        showNotification(`${symbols.length} coin için bot başlatılıyor... (${selectedTimeframe.toUpperCase()})`, 'info');
+        
+        const result = await fetchApi('/api/enhanced-multi-start', { 
             method: 'POST', 
-            body: JSON.stringify({ symbols }) 
+            body: JSON.stringify({ symbols, timeframe: selectedTimeframe }) 
         });
         
         if (result) {
-            updateMultiUI(result);
-            showSuccess(`${symbols.length} coin için bot başlatıldı`);
+            updateEnhancedUI(result);
+            showNotification(`✅ ${symbols.length} coin için gelişmiş bot başlatıldı!`, 'success');
         }
     });
 
     stopButton.addEventListener('click', async () => {
         const result = await fetchApi('/api/stop', { method: 'POST' });
         if (result) {
-            updateMultiUI(result);
-            showSuccess('Bot durduruldu');
+            updateEnhancedUI(result);
+            showNotification('Bot durduruldu', 'info');
         }
     });
 
     addSymbolButton.addEventListener('click', async () => {
         const symbol = singleSymbolInput.value.trim().toUpperCase();
         if (!symbol) {
-            showError('Lütfen bir coin sembolü girin.');
+            showNotification('Lütfen bir coin sembolü girin.', 'error');
             return;
         }
         
@@ -287,15 +489,15 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (result && result.success) {
             singleSymbolInput.value = '';
-            showSuccess(result.message);
-            getMultiStatus(); // Refresh status
+            showNotification(result.message, 'success');
+            getEnhancedStatus(); // Refresh status
         }
     });
 
     removeSymbolButton.addEventListener('click', async () => {
         const symbol = singleSymbolInput.value.trim().toUpperCase();
         if (!symbol) {
-            showError('Lütfen çıkarılacak coin sembolünü girin.');
+            showNotification('Lütfen çıkarılacak coin sembolünü girin.', 'error');
             return;
         }
         
@@ -306,8 +508,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (result && result.success) {
             singleSymbolInput.value = '';
-            showSuccess(result.message);
-            getMultiStatus(); // Refresh status
+            showNotification(result.message, 'success');
+            getEnhancedStatus(); // Refresh status
         }
     });
 
@@ -322,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scanAllButton.textContent = 'Tüm Pozisyonları Tara';
         
         if (result && result.success) {
-            showSuccess(result.message);
+            showNotification(result.message, 'success');
         }
     });
 
@@ -331,14 +533,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Durdur
             const result = await fetchApi('/api/stop-position-monitor', { method: 'POST' });
             if (result && result.success) {
-                showSuccess(result.message);
+                showNotification(result.message, 'info');
                 updateMonitorButton();
             }
         } else {
             // Başlat
             const result = await fetchApi('/api/start-position-monitor', { method: 'POST' });
             if (result && result.success) {
-                showSuccess(result.message);
+                showNotification(result.message, 'success');
                 updateMonitorButton();
             }
         }
@@ -347,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scanSymbolButton.addEventListener('click', async () => {
         const symbol = scanSymbolInput.value.trim().toUpperCase();
         if (!symbol) {
-            showError('Lütfen bir coin sembolü girin.');
+            showNotification('Lütfen bir coin sembolü girin.', 'error');
             return;
         }
         
@@ -364,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (result && result.success) {
             scanSymbolInput.value = '';
-            showSuccess(result.message);
+            showNotification(result.message, 'success');
         }
     });
 
@@ -380,15 +582,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- GERİYE UYUMLULUK EVENT LISTENERS ---
     legacyStartButton.addEventListener('click', async () => {
         const symbol = legacySymbolInput.value.trim().toUpperCase();
+        const selectedTimeframe = timeframeSelect.value;
+        
         if (!symbol) {
-            showError('Lütfen bir coin sembolü girin.');
+            showNotification('Lütfen bir coin sembolü girin.', 'error');
             return;
         }
         
-        console.log('Legacy tek coin bot başlatılıyor:', symbol);
+        console.log('Legacy tek coin bot başlatılıyor:', symbol, selectedTimeframe);
+        showNotification(`Tek coin modu: ${symbol} başlatılıyor... (${selectedTimeframe.toUpperCase()})`, 'info');
+        
         const result = await fetchApi('/api/start', { 
             method: 'POST', 
-            body: JSON.stringify({ symbol }) 
+            body: JSON.stringify({ symbol, timeframe: selectedTimeframe }) 
         });
         
         if (result) {
@@ -403,12 +609,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 position_pnl: result.position_pnl,
                 order_size: result.order_size,
                 last_signals: {},
-                websocket_connections: 1
+                websocket_connections: 1,
+                current_timeframe: result.current_timeframe || selectedTimeframe
             };
-            updateMultiUI(multiResult);
-            showSuccess(`Tek coin modu: ${symbol} başlatıldı`);
+            updateEnhancedUI(multiResult);
+            showNotification(`✅ Tek coin modu: ${symbol} başlatıldı!`, 'success');
         }
     });
+
+    // --- FİLTRE İSTATİSTİKLERİ ---
+    async function loadFilterStatistics() {
+        try {
+            const data = await fetchApi('/api/filter-statistics');
+            if (data) {
+                // Filtre durumlarını güncelle
+                updateFilterDisplay(data.active_filters);
+            }
+        } catch (error) {
+            console.error("Filtre istatistikleri yüklenemedi:", error);
+        }
+    }
+    
+    function updateFilterDisplay(activeFilters) {
+        const filterItems = document.querySelectorAll('.filter-item .filter-status');
+        const filterNames = {
+            'trend_filter': 0,
+            'momentum_filter': 1,
+            'trend_strength_filter': 2,
+            'rsi_filter': 3,
+            'volume_filter': 4,
+            'cooldown_filter': 5
+        };
+        
+        Object.keys(activeFilters).forEach(filterName => {
+            const index = filterNames[filterName];
+            if (index !== undefined && filterItems[index]) {
+                const isActive = activeFilters[filterName];
+                filterItems[index].textContent = isActive ? '✅ Aktif' : '❌ Pasif';
+                filterItems[index].className = isActive ? 'filter-status active' : 'filter-status inactive';
+            }
+        });
+    }
 
     // --- İSTATİSTİK HESAPLAMA ---
     function listenForTradeUpdates() {
@@ -459,7 +700,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- KLAVYE KISAYOLLARI ---
     multiSymbolsInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') multiStartButton.click();
+        if (e.key === 'Enter') enhancedStartButton.click();
     });
 
     singleSymbolInput.addEventListener('keypress', (e) => {
@@ -473,4 +714,11 @@ document.addEventListener('DOMContentLoaded', () => {
     legacySymbolInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') legacyStartButton.click();
     });
+    
+    // --- OTOMATIK YENİLEME ---
+    setInterval(() => {
+        if (auth.currentUser && document.visibilityState === 'visible') {
+            loadFilterStatistics();
+        }
+    }, 30000); // 30 saniyede bir filtre istatistiklerini güncelle
 });
