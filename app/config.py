@@ -19,7 +19,7 @@ class Settings:
     TIMEFRAME: str = "15m"
     
     # --- Kâr/Zarar Ayarları (Stop Loss ve Take Profit) ---
-    STOP_LOSS_PERCENT: float = 0.009   # %0.9 Zarar Durdur
+    STOP_LOSS_PERCENT: float = 0.004   # %0.9 Zarar Durdur
     TAKE_PROFIT_PERCENT: float = 0.006 # %0.4 Kar Al
     
     # 🛡️ --- SAHTE SİNYAL KORUMASI AYARLARI ---
