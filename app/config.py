@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any
 
 load_dotenv()
 
