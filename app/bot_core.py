@@ -24,7 +24,9 @@ class BotCore:
             "order_size": 0.0,
             "dynamic_sizing": True,
             "position_monitor_active": False,
-            "last_signals": {}  # Her coin için son sinyal
+            "last_signals": {},  # Her coin için son sinyal
+            "signal_filters_active": True,  # Sahte sinyal koruması durumu
+            "filtered_signals_count": 0  # Filtrelenen sinyal sayısı
         }
         self.multi_klines = {}  # Her symbol için ayrı kline data
         self._stop_requested = False
@@ -34,6 +36,7 @@ class BotCore:
         self._websocket_connections = {}  # Her symbol için WebSocket bağlantısı
         self._websocket_tasks = []  # WebSocket task'ları
         self._max_reconnect_attempts = 10
+        print("🛡️ Sahte Sinyal Korumalı Bot Core başlatıldı")
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
         for f in symbol_info['filters']:
@@ -88,7 +91,9 @@ class BotCore:
             "status_message": f"{len(symbols)} coin için başlatılıyor...",
             "dynamic_sizing": True,
             "position_monitor_active": False,
-            "last_signals": {symbol: "HOLD" for symbol in symbols}
+            "last_signals": {symbol: "HOLD" for symbol in symbols},
+            "signal_filters_active": True,
+            "filtered_signals_count": 0
         })
         print(f"🚀 Multi-coin bot başlatılıyor: {', '.join(symbols)}")
         
@@ -140,8 +145,8 @@ class BotCore:
                     self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
                     print(f"✅ {symbol} bilgileri alındı (Q:{self.quantity_precision[symbol]}, P:{self.price_precision[symbol]})")
                     
-                    # Geçmiş veri çekme
-                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+                    # Geçmiş veri çekme - sahte sinyal koruması için daha fazla veri
+                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
                     if klines:
                         self.multi_klines[symbol] = klines
                         print(f"✅ {symbol} için {len(klines)} geçmiş mum verisi alındı")
@@ -217,7 +222,7 @@ class BotCore:
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
                 
-            self.status["status_message"] = f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
+            self.status["status_message"] = f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [🛡️ SAHTE SİNYAL KORUMASII + DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_multi_websocket_loop(valid_symbols)
@@ -344,13 +349,15 @@ class BotCore:
                 "position_pnl": 0.0,
                 "order_size": 0.0,
                 "position_monitor_active": False,
-                "last_signals": {}
+                "last_signals": {},
+                "signal_filters_active": False,
+                "filtered_signals_count": 0
             })
             print(self.status["status_message"])
             await binance_client.close()
 
     async def _handle_single_websocket_message(self, symbol: str, message: str):
-        """Tek symbol için WebSocket mesaj işleme"""
+        """🛡️ Sahte sinyal korumalı WebSocket mesaj işleme"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
@@ -371,13 +378,24 @@ class BotCore:
             if symbol not in self.multi_klines:
                 self.multi_klines[symbol] = []
             
-            self.multi_klines[symbol].pop(0) if len(self.multi_klines[symbol]) >= 50 else None
+            self.multi_klines[symbol].pop(0) if len(self.multi_klines[symbol]) >= 100 else None
             self.multi_klines[symbol].append([
                 kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
             ] + ['0'])
             
-            # Sinyal analizi
-            signal = trading_strategy.analyze_klines(self.multi_klines[symbol])
+            # 🛡️ SAHTe SİNYAL KORUMASLI ANALİZ - symbol bilgisi ile
+            signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
+            
+            # Önceki sinyal ile karşılaştır
+            previous_signal = self.status["last_signals"].get(symbol, "HOLD")
+            
+            if signal != previous_signal:
+                if signal == "HOLD":
+                    self.status["filtered_signals_count"] += 1
+                    print(f"🛡️ {symbol} sinyal filtrelendi - toplam: {self.status['filtered_signals_count']}")
+                else:
+                    print(f"🎯 {symbol} yeni onaylanmış sinyal: {previous_signal} -> {signal}")
+            
             self.status["last_signals"][symbol] = signal
             print(f"🔍 {symbol} strateji analizi: {signal}")
 
@@ -483,7 +501,7 @@ class BotCore:
             if order:
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"YENİ {signal} POZİSYONU: {symbol} @ {price} (Tutar: {dynamic_order_size:.2f} USDT) [OTOMATIK TP/SL KORUMASII AKTİF]"
+                self.status["status_message"] = f"YENİ {signal} POZİSYONU: {symbol} @ {price} (Tutar: {dynamic_order_size:.2f} USDT) [🛡️ SAHTE SİNYAL KORUMASII + OTOMATIK TP/SL KORUMASII AKTİF]"
                 print(f"✅ {self.status['status_message']}")
                 
                 # Cache temizle
@@ -652,8 +670,8 @@ class BotCore:
             self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
             self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
             
-            # Geçmiş veri çekme
-            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=50)
+            # Geçmiş veri çekme - sahte sinyal koruması için 100 mum
+            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
             if not klines:
                 return {"success": False, "message": f"{symbol} için geçmiş veri alınamadı"}
             
@@ -714,7 +732,7 @@ class BotCore:
             return {"success": False, "message": f"{symbol} çıkarılırken hata: {e}"}
 
     def get_multi_status(self):
-        """Multi-coin bot durumunu döndür"""
+        """🛡️ Sahte sinyal korumalı multi-coin bot durumunu döndür"""
         return {
             "is_running": self.status["is_running"],
             "symbols": self.status["symbols"],
@@ -727,7 +745,17 @@ class BotCore:
             "last_signals": self.status["last_signals"],
             "position_monitor_active": self.status["position_monitor_active"],
             "websocket_connections": len(self._websocket_connections),
-            "position_manager": position_manager.get_status()
+            "position_manager": position_manager.get_status(),
+            "signal_filters_active": self.status["signal_filters_active"],
+            "filtered_signals_count": self.status["filtered_signals_count"],
+            "filter_status": {
+                "trend_filter": settings.TREND_FILTER_ENABLED,
+                "price_movement_filter": settings.MIN_PRICE_MOVEMENT_ENABLED,
+                "rsi_filter": settings.RSI_FILTER_ENABLED,
+                "cooldown_filter": settings.SIGNAL_COOLDOWN_ENABLED,
+                "volatility_filter": settings.VOLATILITY_FILTER_ENABLED,
+                "volume_filter": settings.VOLUME_FILTER_ENABLED
+            }
         }
 
     # MEVCUT METODLAR - GERİYE UYUMLULUK İÇİN KORUNDU
@@ -763,5 +791,37 @@ class BotCore:
             }
         except Exception as e:
             return {"success": False, "message": f"{symbol} kontrolü hatası: {e}"}
+
+    def get_signal_filter_stats(self):
+        """🛡️ Sahte sinyal filtreleme istatistikleri"""
+        try:
+            filter_stats = {}
+            for symbol in self.status["symbols"]:
+                filter_stats[symbol] = trading_strategy.get_filter_status(symbol)
+            
+            return {
+                "total_filtered_signals": self.status["filtered_signals_count"],
+                "filters_active": self.status["signal_filters_active"],
+                "symbol_filter_details": filter_stats
+            }
+        except Exception as e:
+            print(f"Filter stats hatası: {e}")
+            return {}
+
+    async def toggle_signal_filters(self, enabled: bool):
+        """🛡️ Sahte sinyal filtrelerini aç/kapat"""
+        try:
+            # Bu fonksiyon gelecekte filtre ayarlarını dinamik değiştirmek için kullanılabilir
+            self.status["signal_filters_active"] = enabled
+            filter_status = "aktifleştirildi" if enabled else "devre dışı bırakıldı"
+            print(f"🛡️ Sahte sinyal filtreleri {filter_status}")
+            
+            return {
+                "success": True,
+                "message": f"Sahte sinyal filtreleri {filter_status}",
+                "filters_active": enabled
+            }
+        except Exception as e:
+            return {"success": False, "message": f"Filter toggle hatası: {e}"}
 
 bot_core = BotCore()
