@@ -7,7 +7,7 @@ from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from .bot_core import bot_core
 from .config import settings
 from .firebase_manager import firebase_manager
