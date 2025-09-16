@@ -26,7 +26,11 @@ class BotCore:
             "position_monitor_active": False,
             "last_signals": {},  # Her coin için son sinyal
             "signal_filters_active": True,  # Sahte sinyal koruması durumu
-            "filtered_signals_count": 0  # Filtrelenen sinyal sayısı
+            "filtered_signals_count": 0,  # Filtrelenen sinyal sayısı
+            "current_timeframe": settings.TIMEFRAME,  # YENİ: Seçili zaman dilimi
+            "daily_pnl": 0.0,  # YENİ: Günlük P&L
+            "daily_positions": 0,  # YENİ: Günlük pozisyon sayısı
+            "risk_management_active": True  # YENİ: Risk yönetimi durumu
         }
         self.multi_klines = {}  # Her symbol için ayrı kline data
         self._stop_requested = False
@@ -36,7 +40,7 @@ class BotCore:
         self._websocket_connections = {}  # Her symbol için WebSocket bağlantısı
         self._websocket_tasks = []  # WebSocket task'ları
         self._max_reconnect_attempts = 10
-        print("🛡️ Sahte Sinyal Korumalı Bot Core başlatıldı")
+        print("🛡️ Gelişmiş Risk Yönetimi ve Dinamik TP/SL Destekli Bot Core başlatıldı")
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
         for f in symbol_info['filters']:
@@ -48,19 +52,46 @@ class BotCore:
         return 0
 
     async def _calculate_dynamic_order_size(self):
-        """Dinamik pozisyon boyutu hesapla - bakiyenin %90'ı"""
+        """Gelişmiş dinamik pozisyon boyutu hesaplama - risk yönetimiyle"""
         try:
             current_balance = await binance_client.get_account_balance(use_cache=False)
-            dynamic_size = current_balance * 0.9
             
+            # Risk yönetimine göre maksimum risk miktarı
+            max_risk_amount = current_balance * 0.02  # Maksimum %2 risk
+            
+            # Zaman dilimine göre dinamik sizing
+            timeframe_multipliers = {
+                "1m": 0.8,   # Kısa vadede daha az risk
+                "3m": 0.85,
+                "5m": 0.9,
+                "15m": 0.95,  # Mevcut
+                "30m": 1.0,
+                "1h": 1.05    # Uzun vadede biraz daha fazla
+            }
+            
+            multiplier = timeframe_multipliers.get(settings.TIMEFRAME, 0.95)
+            
+            # Stop loss'a göre pozisyon boyutu hesaplama
+            # Maksimum kayıp = pozisyon_boyutu * kaldıraç * sl_percent
+            # Pozisyon boyutu = max_risk / (kaldıraç * sl_percent)
+            sl_percent = settings.STOP_LOSS_PERCENT
+            max_position_size = max_risk_amount / (settings.LEVERAGE * sl_percent)
+            
+            # Multiplier uygula
+            dynamic_size = max_position_size * multiplier
+            
+            # Limitler
             min_size = 5.0
-            max_size = 1000.0
+            max_size = current_balance * 0.9  # Maksimum bakiyenin %90'ı
             
             final_size = max(min(dynamic_size, max_size), min_size)
             
-            print(f"💰 Dinamik pozisyon hesaplama:")
+            print(f"💰 Gelişmiş dinamik pozisyon hesaplama:")
             print(f"   Mevcut bakiye: {current_balance:.2f} USDT")
-            print(f"   %90'ı: {dynamic_size:.2f} USDT")
+            print(f"   Max risk (%2): {max_risk_amount:.2f} USDT")
+            print(f"   Zaman dilimi: {settings.TIMEFRAME} (x{multiplier})")
+            print(f"   SL: %{sl_percent*100:.2f} | Kaldıraç: {settings.LEVERAGE}x")
+            print(f"   Hesaplanan boyut: {dynamic_size:.2f} USDT")
             print(f"   Kullanılacak tutar: {final_size:.2f} USDT")
             
             self.status["order_size"] = final_size
@@ -68,18 +99,36 @@ class BotCore:
             
         except Exception as e:
             print(f"Dinamik pozisyon hesaplama hatası: {e}")
-            fallback_size = 35.0
+            fallback_size = 25.0  # Daha düşük fallback
             self.status["order_size"] = fallback_size
             return fallback_size
 
-    async def start(self, symbols: list):
-        """ÇOK ÖNEMLİ: Artık symbols listesi alıyor"""
+    def set_timeframe(self, timeframe: str) -> bool:
+        """Zaman dilimini değiştir"""
+        if self.status["is_running"]:
+            print("⚠️ Bot çalışırken zaman dilimi değiştirilemez")
+            return False
+            
+        if settings.set_timeframe(timeframe):
+            self.status["current_timeframe"] = timeframe
+            print(f"🕐 Bot zaman dilimi güncellendi: {timeframe}")
+            print(f"📊 Yeni TP/SL: %{settings.TAKE_PROFIT_PERCENT*100:.2f}/%{settings.STOP_LOSS_PERCENT*100:.2f}")
+            return True
+        return False
+
+    async def start(self, symbols: list, timeframe: str = None):
+        """ÇOK ÖNEMLİ: Artık symbols listesi ve opsiyonel timeframe alıyor"""
         if self.status["is_running"]:
             print("Bot zaten çalışıyor.")
             return
             
         if not symbols or len(symbols) == 0:
             print("❌ Hiç symbol verilmedi!")
+            return
+        
+        # Zaman dilimini ayarla
+        if timeframe and not self.set_timeframe(timeframe):
+            print(f"❌ Geçersiz zaman dilimi: {timeframe}")
             return
             
         self._stop_requested = False
@@ -93,9 +142,15 @@ class BotCore:
             "position_monitor_active": False,
             "last_signals": {symbol: "HOLD" for symbol in symbols},
             "signal_filters_active": True,
-            "filtered_signals_count": 0
+            "filtered_signals_count": 0,
+            "current_timeframe": settings.TIMEFRAME,
+            "daily_pnl": 0.0,
+            "daily_positions": 0,
+            "risk_management_active": True
         })
-        print(f"🚀 Multi-coin bot başlatılıyor: {', '.join(symbols)}")
+        print(f"🚀 Gelişmiş Multi-coin bot başlatılıyor: {', '.join(symbols)}")
+        print(f"🕐 Zaman dilimi: {settings.TIMEFRAME}")
+        print(f"📊 Dinamik TP/SL: %{settings.TAKE_PROFIT_PERCENT*100:.2f}/%{settings.STOP_LOSS_PERCENT*100:.2f}")
         
         try:
             # 1. Binance bağlantısı
@@ -120,13 +175,13 @@ class BotCore:
                 except Exception as cleanup_error:
                     print(f"⚠️ {symbol} temizlik hatası: {cleanup_error} - devam ediliyor")
             
-            # 3. Hesap bakiyesi kontrolü
-            print("3. Hesap bakiyesi kontrol ediliyor...")
+            # 3. Hesap bakiyesi kontrolü ve risk hesaplama
+            print("3. Hesap bakiyesi ve risk kontrolü yapılıyor...")
             try:
                 self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
                 initial_order_size = await self._calculate_dynamic_order_size()
                 print(f"✅ Hesap bakiyesi: {self.status['account_balance']} USDT")
-                print(f"✅ İlk pozisyon boyutu: {initial_order_size} USDT")
+                print(f"✅ Risk bazlı pozisyon boyutu: {initial_order_size} USDT")
             except Exception as balance_error:
                 print(f"❌ Bakiye kontrol hatası: {balance_error}")
                 raise balance_error
@@ -145,8 +200,8 @@ class BotCore:
                     self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
                     print(f"✅ {symbol} bilgileri alındı (Q:{self.quantity_precision[symbol]}, P:{self.price_precision[symbol]})")
                     
-                    # Geçmiş veri çekme - sahte sinyal koruması için daha fazla veri
-                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
+                    # Geçmiş veri çekme - gelişmiş analiz için daha fazla veri
+                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=200)  # 100->200
                     if klines:
                         self.multi_klines[symbol] = klines
                         print(f"✅ {symbol} için {len(klines)} geçmiş mum verisi alındı")
@@ -160,8 +215,8 @@ class BotCore:
                     print(f"❌ {symbol} hazırlık hatası: {symbol_error} - Atlanıyor...")
                     continue
             
-            # 5. Mevcut açık pozisyon kontrolü
-            print("5. Mevcut açık pozisyonlar kontrol ediliyor...")
+            # 5. Mevcut açık pozisyon kontrolü ve risk değerlendirmesi
+            print("5. Mevcut açık pozisyonlar ve risk kontrolü...")
             try:
                 await binance_client._rate_limit_delay()
                 all_positions = await binance_client.client.futures_position_information()
@@ -180,7 +235,7 @@ class BotCore:
                         
                     self.status["active_symbol"] = active_symbol
                     print(f"⚠️ Mevcut {self.status['position_side']} pozisyonu tespit edildi: {active_symbol}")
-                    print("Mevcut kaldıraçla devam ediliyor...")
+                    print("Mevcut pozisyon korunacak ve yönetilecek...")
                     
                     # Mevcut pozisyon için yetim emirleri temizle
                     print(f"🧹 {active_symbol} mevcut pozisyon için ekstra yetim emir temizliği...")
@@ -206,7 +261,7 @@ class BotCore:
                 raise position_error
                 
             # 7. Pozisyon Monitoring Başlat
-            print("7. 🛡️ Otomatik TP/SL monitoring başlatılıyor...")
+            print("7. 🛡️ Gelişmiş otomatik TP/SL monitoring başlatılıyor...")
             try:
                 asyncio.create_task(position_manager.start_monitoring())
                 self.status["position_monitor_active"] = True
@@ -222,7 +277,11 @@ class BotCore:
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
                 
-            self.status["status_message"] = f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [🛡️ SAHTE SİNYAL KORUMASII + DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
+            # Gelişmiş status mesajı
+            rr_ratio = settings.get_risk_reward_ratio()
+            self.status["status_message"] = (f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) "
+                                           f"[🛡️ GELİŞMİŞ SAHTEKİ SİNYAL + DİNAMİK TP/SL (1:{rr_ratio:.1f}) + "
+                                           f"RİSK YÖNETİMİ + OTOMATIK TP/SL AKTİF]")
             print(f"✅ {self.status['status_message']}")
             
             await self._start_multi_websocket_loop(valid_symbols)
@@ -309,7 +368,7 @@ class BotCore:
         """Bot durdurma - tüm WebSocket bağlantılarını kapat"""
         self._stop_requested = True
         if self.status["is_running"]:
-            print("🛑 Multi-coin bot durduruluyor...")
+            print("🛑 Gelişmiş multi-coin bot durduruluyor...")
             
             # WebSocket task'larını iptal et
             for task in self._websocket_tasks:
@@ -351,13 +410,15 @@ class BotCore:
                 "position_monitor_active": False,
                 "last_signals": {},
                 "signal_filters_active": False,
-                "filtered_signals_count": 0
+                "filtered_signals_count": 0,
+                "current_timeframe": settings.TIMEFRAME,
+                "risk_management_active": False
             })
             print(self.status["status_message"])
             await binance_client.close()
 
     async def _handle_single_websocket_message(self, symbol: str, message: str):
-        """🛡️ Sahte sinyal korumalı WebSocket mesaj işleme"""
+        """🛡️ Gelişmiş sahte sinyal korumalı WebSocket mesaj işleme"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
@@ -378,12 +439,12 @@ class BotCore:
             if symbol not in self.multi_klines:
                 self.multi_klines[symbol] = []
             
-            self.multi_klines[symbol].pop(0) if len(self.multi_klines[symbol]) >= 100 else None
+            self.multi_klines[symbol].pop(0) if len(self.multi_klines[symbol]) >= 200 else None  # 100->200
             self.multi_klines[symbol].append([
                 kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
             ] + ['0'])
             
-            # 🛡️ SAHTe SİNYAL KORUMASLI ANALİZ - symbol bilgisi ile
+            # 🛡️ GELİŞMİŞ SAHTEKİ SİNYAL KORUMASLI ANALİZ
             signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
             
             # Önceki sinyal ile karşılaştır
@@ -392,30 +453,35 @@ class BotCore:
             if signal != previous_signal:
                 if signal == "HOLD":
                     self.status["filtered_signals_count"] += 1
-                    print(f"🛡️ {symbol} sinyal filtrelendi - toplam: {self.status['filtered_signals_count']}")
+                    print(f"🛡️ {symbol} sinyal GELİŞMİŞ filtreler tarafından engellendi - toplam: {self.status['filtered_signals_count']}")
                 else:
-                    print(f"🎯 {symbol} yeni onaylanmış sinyal: {previous_signal} -> {signal}")
+                    print(f"🎯 {symbol} KALİTELİ sinyal onaylandı: {previous_signal} -> {signal}")
             
             self.status["last_signals"][symbol] = signal
-            print(f"🔍 {symbol} strateji analizi: {signal}")
+            print(f"🔍 {symbol} gelişmiş analiz sonucu: {signal}")
 
-            # ÇOK ÖNEMLİ: Pozisyon yönetimi - Multi-coin mantığı
-            await self._handle_multi_coin_position_logic(symbol, signal)
+            # ÇOK ÖNEMLİ: Pozisyon yönetimi - Gelişmiş Multi-coin mantığı
+            await self._handle_enhanced_multi_coin_position_logic(symbol, signal)
                 
         except Exception as e:
             print(f"❌ {symbol} WebSocket mesaj işlenirken hata: {e}")
 
-    async def _handle_multi_coin_position_logic(self, signal_symbol: str, signal: str):
-        """Multi-coin pozisyon yönetim mantığı"""
+    async def _handle_enhanced_multi_coin_position_logic(self, signal_symbol: str, signal: str):
+        """Gelişmiş multi-coin pozisyon yönetim mantığı"""
         try:
             # Mevcut durum kontrolü
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
             
+            # Risk yönetimi kontrolleri
+            if not await self._check_risk_management():
+                print(f"🚫 Risk yönetimi: Yeni pozisyon açılamaz")
+                return
+            
             # DURUM 1: Hiç pozisyon yok, yeni sinyal geldi
             if not current_active_symbol and not current_position_side and signal != "HOLD":
-                print(f"🚀 Yeni pozisyon fırsatı: {signal_symbol} -> {signal}")
-                await self._open_new_position(signal_symbol, signal)
+                print(f"🚀 Yeni kaliteli pozisyon fırsatı: {signal_symbol} -> {signal}")
+                await self._open_new_enhanced_position(signal_symbol, signal)
                 return
             
             # DURUM 2: Mevcut pozisyon var, aynı symbol'den ters sinyal geldi
@@ -423,8 +489,8 @@ class BotCore:
                 current_position_side and 
                 signal != "HOLD" and 
                 signal != current_position_side):
-                print(f"🔄 {signal_symbol} ters sinyal geldi: {current_position_side} -> {signal}")
-                await self._flip_position(signal_symbol, signal)
+                print(f"🔄 {signal_symbol} kaliteli ters sinyal geldi: {current_position_side} -> {signal}")
+                await self._flip_enhanced_position(signal_symbol, signal)
                 return
             
             # DURUM 3: Mevcut pozisyon var, başka symbol'den sinyal geldi
@@ -432,8 +498,11 @@ class BotCore:
                 current_active_symbol != signal_symbol and 
                 current_position_side and 
                 signal != "HOLD"):
-                print(f"💡 Yeni coin fırsatı: {signal_symbol} -> {signal} (Mevcut: {current_active_symbol})")
-                await self._switch_to_new_coin(current_active_symbol, signal_symbol, signal)
+                
+                # Sadece mevcut pozisyondan daha iyi risk/reward varsa değiştir
+                if await self._should_switch_position(current_active_symbol, signal_symbol, signal):
+                    print(f"💡 Daha iyi fırsat: {signal_symbol} -> {signal} (Mevcut: {current_active_symbol})")
+                    await self._switch_to_new_enhanced_coin(current_active_symbol, signal_symbol, signal)
                 return
             
             # DURUM 4: Pozisyon kapanmış mı kontrol et (SL/TP)
@@ -442,16 +511,25 @@ class BotCore:
                 if not open_positions:
                     print(f"✅ {current_active_symbol} pozisyonu SL/TP ile kapandı")
                     pnl = await binance_client.get_last_trade_pnl(current_active_symbol)
+                    
+                    # Trading strategy'e sonucu bildir
+                    trading_strategy.update_trade_result(current_active_symbol, pnl)
+                    
                     firebase_manager.log_trade({
                         "symbol": current_active_symbol, 
                         "pnl": pnl, 
                         "status": "CLOSED_BY_SL_TP", 
-                        "timestamp": datetime.now(timezone.utc)
+                        "timestamp": datetime.now(timezone.utc),
+                        "timeframe": settings.TIMEFRAME,
+                        "risk_reward_ratio": settings.get_risk_reward_ratio()
                     })
                     
                     # Pozisyon kapandı, durumu temizle
                     self.status["active_symbol"] = None
                     self.status["position_side"] = None
+                    
+                    # Günlük PnL güncelle
+                    self.status["daily_pnl"] += pnl
                     
                     # Pozisyon kapandıktan sonra yetim emir temizliği
                     print(f"🧹 {current_active_symbol} pozisyon kapandı - yetim emir temizliği yapılıyor...")
@@ -463,22 +541,71 @@ class BotCore:
                     # Eğer bu mesajı gönderen symbol'de aktif sinyal varsa hemen pozisyon aç
                     if signal != "HOLD":
                         print(f"🚀 Pozisyon kapandıktan sonra hemen yeni fırsat: {signal_symbol} -> {signal}")
-                        await self._open_new_position(signal_symbol, signal)
+                        await self._open_new_enhanced_position(signal_symbol, signal)
                         
         except Exception as e:
-            print(f"❌ Multi-coin pozisyon mantığı hatası: {e}")
+            print(f"❌ Gelişmiş multi-coin pozisyon mantığı hatası: {e}")
 
-    async def _open_new_position(self, symbol: str, signal: str):
-        """Yeni pozisyon açma"""
+    async def _check_risk_management(self) -> bool:
+        """Gelişmiş risk yönetimi kontrolleri"""
         try:
-            print(f"🎯 {symbol} için yeni {signal} pozisyonu açılıyor...")
+            # Günlük pozisyon limiti kontrolü (trading_strategy'den al)
+            total_daily_positions = sum(trading_strategy.daily_positions.values())
+            if total_daily_positions >= settings.MAX_DAILY_POSITIONS:
+                print(f"🚫 Günlük pozisyon limiti aşıldı: {total_daily_positions}/{settings.MAX_DAILY_POSITIONS}")
+                return False
+            
+            # Günlük kayıp limiti kontrolü
+            total_daily_loss = sum(trading_strategy.daily_loss.values())
+            current_balance = await binance_client.get_account_balance(use_cache=True)
+            max_daily_loss = current_balance * settings.MAX_DAILY_LOSS_PERCENT
+            
+            if total_daily_loss >= max_daily_loss:
+                print(f"🚫 Günlük kayıp limiti aşıldı: {total_daily_loss:.2f}/{max_daily_loss:.2f} USDT")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            print(f"⚠️ Risk yönetimi kontrolü hatası: {e}")
+            return True  # Hata durumunda işleme devam et
+
+    async def _should_switch_position(self, current_symbol: str, new_symbol: str, new_signal: str) -> bool:
+        """Pozisyon değişimi gerekli mi kontrol et"""
+        try:
+            # Mevcut pozisyonun PnL'ini kontrol et
+            current_pnl = await binance_client.get_position_pnl(current_symbol, use_cache=True)
+            
+            # Eğer mevcut pozisyon karlı ise değiştirme (sadece zarar durumunda)
+            if current_pnl > 0:
+                print(f"💰 {current_symbol} karlı ({current_pnl:.2f}), pozisyon değişimi yapılmayacak")
+                return False
+            
+            # Eğer mevcut pozisyonun ardışık kayıp sayısı yüksekse değiştir
+            current_consecutive_losses = trading_strategy.consecutive_losses.get(current_symbol, 0)
+            new_consecutive_losses = trading_strategy.consecutive_losses.get(new_symbol, 0)
+            
+            if current_consecutive_losses > new_consecutive_losses:
+                print(f"📉 {current_symbol} ardışık kayıp yüksek ({current_consecutive_losses}), {new_symbol} tercih edildi")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"⚠️ Pozisyon değişimi kontrolü hatası: {e}")
+            return False
+
+    async def _open_new_enhanced_position(self, symbol: str, signal: str):
+        """Gelişmiş yeni pozisyon açma"""
+        try:
+            print(f"🎯 {symbol} için yeni {signal} pozisyonu açılıyor... (TF: {settings.TIMEFRAME})")
             
             # Yetim emir temizliği
             print(f"🧹 {symbol} pozisyon öncesi yetim emir temizliği...")
             await binance_client.cancel_all_orders_safe(symbol)
             await asyncio.sleep(0.3)
             
-            # Dinamik order size hesapla
+            # Gelişmiş dinamik order size hesapla
             dynamic_order_size = await self._calculate_dynamic_order_size()
             
             # Pozisyon aç
@@ -493,7 +620,7 @@ class BotCore:
                 print(f"❌ {symbol} için hesaplanan miktar çok düşük.")
                 return False
 
-            # YETİM EMİR KORUMASLI pozisyon açma
+            # Dinamik TP/SL ile YETİM EMİR KORUMASLI pozisyon açma
             order = await binance_client.create_market_order_with_sl_tp(
                 symbol, side, quantity, price, self.price_precision.get(symbol, 2)
             )
@@ -501,7 +628,16 @@ class BotCore:
             if order:
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"YENİ {signal} POZİSYONU: {symbol} @ {price} (Tutar: {dynamic_order_size:.2f} USDT) [🛡️ SAHTE SİNYAL KORUMASII + OTOMATIK TP/SL KORUMASII AKTİF]"
+                self.status["daily_positions"] += 1
+                
+                # Gelişmiş status mesajı
+                rr_ratio = settings.get_risk_reward_ratio()
+                sl_percent = settings.STOP_LOSS_PERCENT * 100
+                tp_percent = settings.TAKE_PROFIT_PERCENT * 100
+                
+                self.status["status_message"] = (f"YENİ {signal} POZİSYONU: {symbol} @ {price} "
+                                                f"(RR: 1:{rr_ratio:.1f} | SL:%{sl_percent:.2f} TP:%{tp_percent:.2f} | "
+                                                f"TF: {settings.TIMEFRAME}) [🛡️ GELİŞMİŞ SAHTEKİ SİNYAL + RİSK YÖNETİMİ AKTİF]")
                 print(f"✅ {self.status['status_message']}")
                 
                 # Cache temizle
@@ -528,8 +664,8 @@ class BotCore:
             await binance_client.force_cleanup_orders(symbol)
             return False
 
-    async def _flip_position(self, symbol: str, new_signal: str):
-        """Aynı coin'de pozisyon çevirme (mevcut sistem - KORUNDU)"""
+    async def _flip_enhanced_position(self, symbol: str, new_signal: str):
+        """Gelişmiş aynı coin'de pozisyon çevirme"""
         try:
             # Pozisyon değişiminden önce yetim emir kontrolü
             print(f"🧹 {symbol} pozisyon değişimi öncesi yetim emir temizliği...")
@@ -542,15 +678,24 @@ class BotCore:
                 position = open_positions[0]
                 position_amt = float(position['positionAmt'])
                 side_to_close = 'SELL' if position_amt > 0 else 'BUY'
-                print(f"--> Ters sinyal geldi. Mevcut {self.status['position_side']} pozisyonu kapatılıyor...")
+                print(f"--> Ters kaliteli sinyal geldi. Mevcut {self.status['position_side']} pozisyonu kapatılıyor...")
                 
                 pnl = await binance_client.get_last_trade_pnl(symbol)
+                
+                # Trading strategy'e sonucu bildir
+                trading_strategy.update_trade_result(symbol, pnl)
+                
                 firebase_manager.log_trade({
                     "symbol": symbol, 
                     "pnl": pnl, 
                     "status": "CLOSED_BY_FLIP", 
-                    "timestamp": datetime.now(timezone.utc)
+                    "timestamp": datetime.now(timezone.utc),
+                    "timeframe": settings.TIMEFRAME,
+                    "risk_reward_ratio": settings.get_risk_reward_ratio()
                 })
+
+                # Günlük PnL güncelle
+                self.status["daily_pnl"] += pnl
 
                 # Pozisyonu kapat
                 close_result = await binance_client.close_position(symbol, position_amt, side_to_close)
@@ -561,13 +706,13 @@ class BotCore:
                 await asyncio.sleep(1)
 
             # Yeni pozisyon aç
-            success = await self._open_new_position(symbol, new_signal)
+            success = await self._open_new_enhanced_position(symbol, new_signal)
             if not success:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
                 
         except Exception as e:
-            print(f"❌ {symbol} pozisyon değiştirme hatası: {e}")
+            print(f"❌ {symbol} gelişmiş pozisyon değiştirme hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(symbol)
             except Exception as cleanup_error:
@@ -575,10 +720,10 @@ class BotCore:
             self.status["active_symbol"] = None
             self.status["position_side"] = None
 
-    async def _switch_to_new_coin(self, current_symbol: str, new_symbol: str, new_signal: str):
-        """Farklı coin'e geçiş yapma"""
+    async def _switch_to_new_enhanced_coin(self, current_symbol: str, new_symbol: str, new_signal: str):
+        """Gelişmiş farklı coin'e geçiş yapma"""
         try:
-            print(f"🔄 Coin değişimi: {current_symbol} -> {new_symbol} ({new_signal})")
+            print(f"🔄 Gelişmiş coin değişimi: {current_symbol} -> {new_symbol} ({new_signal})")
             
             # Mevcut pozisyonu kapat
             open_positions = await binance_client.get_open_positions(current_symbol, use_cache=False)
@@ -590,12 +735,22 @@ class BotCore:
                 print(f"📉 {current_symbol} pozisyonu kapatılıyor (coin değişimi)...")
                 
                 pnl = await binance_client.get_last_trade_pnl(current_symbol)
+                
+                # Trading strategy'e sonucu bildir
+                trading_strategy.update_trade_result(current_symbol, pnl)
+                
                 firebase_manager.log_trade({
                     "symbol": current_symbol, 
                     "pnl": pnl, 
                     "status": "CLOSED_FOR_COIN_SWITCH", 
-                    "timestamp": datetime.now(timezone.utc)
+                    "timestamp": datetime.now(timezone.utc),
+                    "timeframe": settings.TIMEFRAME,
+                    "risk_reward_ratio": settings.get_risk_reward_ratio(),
+                    "switched_to": new_symbol
                 })
+
+                # Günlük PnL güncelle
+                self.status["daily_pnl"] += pnl
 
                 # Mevcut pozisyonu kapat
                 close_result = await binance_client.close_position(current_symbol, position_amt, side_to_close)
@@ -606,14 +761,14 @@ class BotCore:
                 await asyncio.sleep(1)
 
             # Yeni coin'de pozisyon aç
-            success = await self._open_new_position(new_symbol, new_signal)
+            success = await self._open_new_enhanced_position(new_symbol, new_signal)
             if not success:
                 print(f"❌ {new_symbol} yeni pozisyon açılamadı")
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
                 
         except Exception as e:
-            print(f"❌ Coin değişimi hatası: {e}")
+            print(f"❌ Gelişmiş coin değişimi hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(current_symbol)
                 await binance_client.force_cleanup_orders(new_symbol)
@@ -623,7 +778,7 @@ class BotCore:
             self.status["position_side"] = None
 
     async def _update_status_info(self):
-        """Durum bilgilerini günceller - rate limit korumalı"""
+        """Gelişmiş durum bilgilerini günceller - rate limit korumalı"""
         try:
             if self.status["is_running"]:
                 # Cache kullanarak sorgu sayısını azalt
@@ -634,12 +789,16 @@ class BotCore:
                     )
                 else:
                     self.status["position_pnl"] = 0.0
+                
                 # Order size'ı dinamik tut
                 await self._calculate_dynamic_order_size()
                 
                 # Position monitor durumunu güncelle
                 monitor_status = position_manager.get_status()
                 self.status["position_monitor_active"] = monitor_status["is_running"]
+                
+                # Risk yönetimi bilgileri güncelle
+                self.status["daily_positions"] = sum(trading_strategy.daily_positions.values())
                 
         except Exception as e:
             print(f"Durum güncelleme hatası: {e}")
@@ -651,7 +810,78 @@ class BotCore:
         factor = 10 ** precision
         return math.floor(quantity * factor) / factor
 
-    # YENİ METODLAR - MULTI-COIN YÖNETİMİ
+    def get_multi_status(self):
+        """🛡️ Gelişmiş sahte sinyal korumalı multi-coin bot durumunu döndür"""
+        return {
+            "is_running": self.status["is_running"],
+            "symbols": self.status["symbols"],
+            "active_symbol": self.status["active_symbol"],
+            "position_side": self.status["position_side"],
+            "status_message": self.status["status_message"],
+            "account_balance": self.status["account_balance"],
+            "position_pnl": self.status["position_pnl"],
+            "order_size": self.status["order_size"],
+            "last_signals": self.status["last_signals"],
+            "position_monitor_active": self.status["position_monitor_active"],
+            "websocket_connections": len(self._websocket_connections),
+            "position_manager": position_manager.get_status(),
+            "signal_filters_active": self.status["signal_filters_active"],
+            "filtered_signals_count": self.status["filtered_signals_count"],
+            "current_timeframe": self.status["current_timeframe"],
+            "daily_pnl": self.status["daily_pnl"],
+            "daily_positions": self.status["daily_positions"],
+            "risk_management_active": self.status["risk_management_active"],
+            "filter_status": {
+                "trend_filter": settings.TREND_FILTER_ENABLED,
+                "momentum_filter": settings.MOMENTUM_FILTER_ENABLED,
+                "trend_strength_filter": settings.TREND_STRENGTH_FILTER_ENABLED,
+                "price_movement_filter": settings.MIN_PRICE_MOVEMENT_ENABLED,
+                "rsi_filter": settings.RSI_FILTER_ENABLED,
+                "cooldown_filter": settings.SIGNAL_COOLDOWN_ENABLED,
+                "volatility_filter": settings.VOLATILITY_FILTER_ENABLED,
+                "volume_filter": settings.VOLUME_FILTER_ENABLED
+            },
+            "risk_management": {
+                "risk_reward_ratio": settings.get_risk_reward_ratio(),
+                "stop_loss_percent": settings.STOP_LOSS_PERCENT * 100,
+                "take_profit_percent": settings.TAKE_PROFIT_PERCENT * 100,
+                "max_daily_positions": settings.MAX_DAILY_POSITIONS,
+                "max_daily_loss_percent": settings.MAX_DAILY_LOSS_PERCENT * 100,
+                "consecutive_losses": {symbol: trading_strategy.consecutive_losses.get(symbol, 0) 
+                                     for symbol in self.status["symbols"]}
+            }
+        }
+
+    # YENİ METODLAR - ZAMAN DİLİMİ YÖNETİMİ
+    
+    def get_available_timeframes(self):
+        """Desteklenen zaman dilimlerini döndür"""
+        return list(settings.TIMEFRAME_SETTINGS.keys())
+    
+    async def change_timeframe(self, timeframe: str):
+        """Bot durdurulmadan zaman dilimini değiştir (gelecek özellik)"""
+        if self.status["is_running"]:
+            return {
+                "success": False, 
+                "message": "Bot çalışırken zaman dilimi değiştirilemez. Bot'u durdurun ve yeni zaman dilimi ile başlatın."
+            }
+        
+        if self.set_timeframe(timeframe):
+            return {
+                "success": True,
+                "message": f"Zaman dilimi {timeframe} olarak ayarlandı",
+                "new_settings": {
+                    "timeframe": settings.TIMEFRAME,
+                    "stop_loss_percent": settings.STOP_LOSS_PERCENT * 100,
+                    "take_profit_percent": settings.TAKE_PROFIT_PERCENT * 100,
+                    "risk_reward_ratio": settings.get_risk_reward_ratio()
+                }
+            }
+        else:
+            return {"success": False, "message": f"Geçersiz zaman dilimi: {timeframe}"}
+
+    # MEVCUT METODLAR - GERİYE UYUMLULUK İÇİN KORUNDU (önceki kodlar...)
+    
     async def add_symbol(self, symbol: str):
         """Çalışan bot'a yeni symbol ekle"""
         if not self.status["is_running"]:
@@ -670,8 +900,8 @@ class BotCore:
             self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
             self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
             
-            # Geçmiş veri çekme - sahte sinyal koruması için 100 mum
-            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
+            # Geçmiş veri çekme - sahte sinyal koruması için 200 mum
+            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=200)
             if not klines:
                 return {"success": False, "message": f"{symbol} için geçmiş veri alınamadı"}
             
@@ -688,7 +918,7 @@ class BotCore:
             task = asyncio.create_task(self._single_websocket_loop(symbol))
             self._websocket_tasks.append(task)
             
-            print(f"✅ {symbol} bot'a eklendi")
+            print(f"✅ {symbol} bot'a eklendi ({settings.TIMEFRAME})")
             return {"success": True, "message": f"{symbol} başarıyla eklendi"}
             
         except Exception as e:
@@ -731,34 +961,7 @@ class BotCore:
         except Exception as e:
             return {"success": False, "message": f"{symbol} çıkarılırken hata: {e}"}
 
-    def get_multi_status(self):
-        """🛡️ Sahte sinyal korumalı multi-coin bot durumunu döndür"""
-        return {
-            "is_running": self.status["is_running"],
-            "symbols": self.status["symbols"],
-            "active_symbol": self.status["active_symbol"],
-            "position_side": self.status["position_side"],
-            "status_message": self.status["status_message"],
-            "account_balance": self.status["account_balance"],
-            "position_pnl": self.status["position_pnl"],
-            "order_size": self.status["order_size"],
-            "last_signals": self.status["last_signals"],
-            "position_monitor_active": self.status["position_monitor_active"],
-            "websocket_connections": len(self._websocket_connections),
-            "position_manager": position_manager.get_status(),
-            "signal_filters_active": self.status["signal_filters_active"],
-            "filtered_signals_count": self.status["filtered_signals_count"],
-            "filter_status": {
-                "trend_filter": settings.TREND_FILTER_ENABLED,
-                "price_movement_filter": settings.MIN_PRICE_MOVEMENT_ENABLED,
-                "rsi_filter": settings.RSI_FILTER_ENABLED,
-                "cooldown_filter": settings.SIGNAL_COOLDOWN_ENABLED,
-                "volatility_filter": settings.VOLATILITY_FILTER_ENABLED,
-                "volume_filter": settings.VOLUME_FILTER_ENABLED
-            }
-        }
-
-    # MEVCUT METODLAR - GERİYE UYUMLULUK İÇİN KORUNDU
+    # Diğer mevcut metodlar aynı kalacak...
     async def scan_all_positions(self):
         """Tüm açık pozisyonları manuel tarayıp TP/SL ekle"""
         if not self.status["is_running"]:
@@ -766,8 +969,6 @@ class BotCore:
             
         try:
             print("🔍 Manuel pozisyon taraması başlatılıyor...")
-            
-            # Position manager ile tam tarama yap
             await position_manager._scan_and_protect_positions()
             
             return {
@@ -791,37 +992,5 @@ class BotCore:
             }
         except Exception as e:
             return {"success": False, "message": f"{symbol} kontrolü hatası: {e}"}
-
-    def get_signal_filter_stats(self):
-        """🛡️ Sahte sinyal filtreleme istatistikleri"""
-        try:
-            filter_stats = {}
-            for symbol in self.status["symbols"]:
-                filter_stats[symbol] = trading_strategy.get_filter_status(symbol)
-            
-            return {
-                "total_filtered_signals": self.status["filtered_signals_count"],
-                "filters_active": self.status["signal_filters_active"],
-                "symbol_filter_details": filter_stats
-            }
-        except Exception as e:
-            print(f"Filter stats hatası: {e}")
-            return {}
-
-    async def toggle_signal_filters(self, enabled: bool):
-        """🛡️ Sahte sinyal filtrelerini aç/kapat"""
-        try:
-            # Bu fonksiyon gelecekte filtre ayarlarını dinamik değiştirmek için kullanılabilir
-            self.status["signal_filters_active"] = enabled
-            filter_status = "aktifleştirildi" if enabled else "devre dışı bırakıldı"
-            print(f"🛡️ Sahte sinyal filtreleri {filter_status}")
-            
-            return {
-                "success": True,
-                "message": f"Sahte sinyal filtreleri {filter_status}",
-                "filters_active": enabled
-            }
-        except Exception as e:
-            return {"success": False, "message": f"Filter toggle hatası: {e}"}
 
 bot_core = BotCore()
