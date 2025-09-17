@@ -17,64 +17,87 @@ class Settings:
     # --- İşlem Parametreleri ---
     LEVERAGE: int = 20
     ORDER_SIZE_USDT: float = 35.0
-    TIMEFRAME: str = "15m"  # Varsayılan, dinamik olarak değişecek
+    TIMEFRAME: str = "15m"
     
-    # --- Zaman Dilimine Göre Dinamik TP/SL Ayarları ---
+    # --- 🔧 DEBUG AYARLARI - FİLTRELER DEVRE DIŞI ---
+    
+    # DEBUG: Filtrelerin çoğunu kapat
+    TREND_FILTER_ENABLED: bool = False          # KAPALI
+    MOMENTUM_FILTER_ENABLED: bool = False       # KAPALI
+    TREND_STRENGTH_FILTER_ENABLED: bool = False # KAPALI
+    PRICE_ACTION_FILTER_ENABLED: bool = False   # KAPALI
+    MIN_PRICE_MOVEMENT_ENABLED: bool = False    # KAPALI
+    
+    # Kritik filtreleri de gevşet
+    RSI_FILTER_ENABLED: bool = False            # KAPALI (debug için)
+    RSI_PERIOD: int = 14
+    RSI_OVERSOLD: float = 15.0      # Çok gevşek
+    RSI_OVERBOUGHT: float = 85.0    # Çok gevşek
+    
+    SIGNAL_COOLDOWN_ENABLED: bool = True        # Sadece bu açık (çok kısa)
+    
+    VOLATILITY_FILTER_ENABLED: bool = False     # KAPALI
+    ATR_PERIOD: int = 14
+    
+    VOLUME_FILTER_ENABLED: bool = False         # KAPALI
+    VOLUME_MA_PERIOD: int = 20
+    MIN_VOLUME_MULTIPLIER: float = 1.0          # Çok düşük
+    
+    # --- DEBUG: ZAMAN DİLİMİ AYARLARI - ÇOK GEVŞETİLDİ ---
     TIMEFRAME_SETTINGS: Dict[str, Dict[str, float]] = {
         "1m": {
-            "stop_loss_percent": 0.0015,    # %0.15 - Çok dar SL
-            "take_profit_percent": 0.0025,  # %0.25 - Hızlı kar alma
-            "min_price_movement": 0.0008,   # %0.08 - Minimum hareket
-            "signal_strength": 0.0001,      # Çok hassas sinyal
-            "cooldown_minutes": 3,          # 3 dakika soğuma
-            "atr_multiplier": 1.2           # Düşük volatilite eşiği
+            "stop_loss_percent": 0.0015,
+            "take_profit_percent": 0.0025,
+            "min_price_movement": 0.0001,       # Çok düşük
+            "signal_strength": 0.00001,         # Çok düşük
+            "cooldown_minutes": 1,              # 1 dakika
+            "atr_multiplier": 0.5               # Çok düşük
         },
         "3m": {
-            "stop_loss_percent": 0.002,     # %0.2
-            "take_profit_percent": 0.004,   # %0.4
-            "min_price_movement": 0.0012,   # %0.12
-            "signal_strength": 0.0001,
-            "cooldown_minutes": 5,          # 5 dakika soğuma
-            "atr_multiplier": 1.3
+            "stop_loss_percent": 0.002,
+            "take_profit_percent": 0.004,
+            "min_price_movement": 0.0001,
+            "signal_strength": 0.00001,
+            "cooldown_minutes": 2,              # 2 dakika
+            "atr_multiplier": 0.5
         },
         "5m": {
-            "stop_loss_percent": 0.003,     # %0.3
-            "take_profit_percent": 0.005,   # %0.5
-            "min_price_movement": 0.0015,   # %0.15
-            "signal_strength": 0.00015,
-            "cooldown_minutes": 8,          # 8 dakika soğuma
-            "atr_multiplier": 1.4
+            "stop_loss_percent": 0.003,
+            "take_profit_percent": 0.005,
+            "min_price_movement": 0.0001,
+            "signal_strength": 0.00001,
+            "cooldown_minutes": 2,              # 2 dakika
+            "atr_multiplier": 0.5
         },
         "15m": {
-            "stop_loss_percent": 0.004,     # %0.4 - Mevcut
-            "take_profit_percent": 0.006,   # %0.6 - Mevcut
-            "min_price_movement": 0.003,    # %0.3
-            "signal_strength": 0.0002,
-            "cooldown_minutes": 15,         # 15 dakika soğuma
-            "atr_multiplier": 1.5
+            "stop_loss_percent": 0.004,
+            "take_profit_percent": 0.006,
+            "min_price_movement": 0.0001,       # Çok düşük
+            "signal_strength": 0.00001,         # Çok düşük
+            "cooldown_minutes": 2,              # 2 dakika (15 yerine)
+            "atr_multiplier": 0.5               # Çok düşük
         },
         "30m": {
-            "stop_loss_percent": 0.006,     # %0.6 - Daha geniş SL
-            "take_profit_percent": 0.009,   # %0.9 - Daha büyük hedef
-            "min_price_movement": 0.004,    # %0.4
-            "signal_strength": 0.0003,
-            "cooldown_minutes": 25,         # 25 dakika soğuma
-            "atr_multiplier": 1.6
+            "stop_loss_percent": 0.006,
+            "take_profit_percent": 0.009,
+            "min_price_movement": 0.0001,
+            "signal_strength": 0.00001,
+            "cooldown_minutes": 5,              # 5 dakika
+            "atr_multiplier": 0.5
         },
         "1h": {
-            "stop_loss_percent": 0.008,     # %0.8 - En geniş SL
-            "take_profit_percent": 0.012,   # %1.2 - En büyük hedef
-            "min_price_movement": 0.005,    # %0.5
-            "signal_strength": 0.0004,
-            "cooldown_minutes": 45,         # 45 dakika soğuma
-            "atr_multiplier": 1.8
+            "stop_loss_percent": 0.008,
+            "take_profit_percent": 0.012,
+            "min_price_movement": 0.0001,
+            "signal_strength": 0.00001,
+            "cooldown_minutes": 5,              # 5 dakika
+            "atr_multiplier": 0.5
         }
     }
     
     # Aktif zaman dilimi ayarlarını al
     @classmethod
     def get_current_settings(cls) -> Dict[str, float]:
-        """Seçili zaman dilimine göre ayarları döndür"""
         return cls.TIMEFRAME_SETTINGS.get(cls.TIMEFRAME, cls.TIMEFRAME_SETTINGS["15m"])
     
     # Dinamik özellikler
@@ -102,72 +125,25 @@ class Settings:
     def MIN_ATR_MULTIPLIER(self) -> float:
         return self.get_current_settings()["atr_multiplier"]
     
-    # --- GÜÇLENDİRİLMİŞ SAHTE SİNYAL KORUMASI AYARLARI ---
-    
-    # Trend Filtresi - Zaman dilimine göre EMA
-    TREND_FILTER_ENABLED: bool = True
+    # --- DEBUG: TREND FİLTRESİ AYARLARI ---
     TREND_EMA_PERIODS: Dict[str, int] = {
-        "1m": 20,   # Kısa vadeli trend
+        "1m": 20,
         "3m": 30,
         "5m": 40,
-        "15m": 50,  # Mevcut
+        "15m": 50,
         "30m": 60,
-        "1h": 80    # Uzun vadeli trend
+        "1h": 80
     }
     
     @property
     def TREND_EMA_PERIOD(self) -> int:
         return self.TREND_EMA_PERIODS.get(self.TIMEFRAME, 50)
     
-    # RSI Filtresi - Sıkılaştırılmış
-    RSI_FILTER_ENABLED: bool = True
-    RSI_PERIOD: int = 14
-    RSI_OVERSOLD: float = 25.0      # Daha sıkı (30 -> 25)
-    RSI_OVERBOUGHT: float = 75.0    # Daha sıkı (70 -> 75)
-    
-    # Sinyal Soğuma Süresi - Dinamik
-    SIGNAL_COOLDOWN_ENABLED: bool = True
-    
-    # Volatilite Filtresi - Sıkılaştırılmış
-    VOLATILITY_FILTER_ENABLED: bool = True
-    ATR_PERIOD: int = 14
-    
-    # Hacim Filtresi - Güçlendirilmiş
-    VOLUME_FILTER_ENABLED: bool = True
-    VOLUME_MA_PERIOD: int = 20
-    MIN_VOLUME_MULTIPLIER: float = 1.5  # 1.2 -> 1.5 (Daha yüksek hacim gereksinimi)
-    
-    # Minimum Fiyat Hareketi Filtresi - Dinamik
-    MIN_PRICE_MOVEMENT_ENABLED: bool = True
-    
-    # --- YENİ EKLENDİ: MOMENTUM VE TREND GÜCÜ FİLTRELERİ ---
-    
-    # Momentum Filtresi
-    MOMENTUM_FILTER_ENABLED: bool = True
-    MOMENTUM_PERIOD: int = 10
-    MIN_MOMENTUM_STRENGTH: float = 0.5
-    
-    # Trend Gücü Filtresi (ADX benzeri)
-    TREND_STRENGTH_FILTER_ENABLED: bool = True
-    MIN_TREND_STRENGTH: float = 0.3
-    
-    # Fiyat Aksiyon Filtresi
-    PRICE_ACTION_FILTER_ENABLED: bool = True
-    ENGULFING_REQUIRED: bool = False  # Engulfing pattern gereksinimi
-    
-    # --- RISK YÖNETİMİ GÜVENLİK AYARLARI ---
-    
-    # Maksimum günlük pozisyon sayısı
-    MAX_DAILY_POSITIONS: int = 8
-    
-    # Maksimum kayıp oranı (günlük bakiyenin %5'i)
-    MAX_DAILY_LOSS_PERCENT: float = 0.05
-    
-    # Minimum risk/reward oranı
-    MIN_RISK_REWARD_RATIO: float = 1.3  # TP en az SL'nin 1.3 katı olmalı
-    
-    # Whipsaw koruması - ard arda kayıp pozisyon limiti
-    MAX_CONSECUTIVE_LOSSES: int = 3
+    # --- DEBUG: RİSK YÖNETİMİ - ÇOK GEVŞEK ---
+    MAX_DAILY_POSITIONS: int = 100              # Çok yüksek (8 yerine)
+    MAX_DAILY_LOSS_PERCENT: float = 0.5         # %50 (çok yüksek)
+    MIN_RISK_REWARD_RATIO: float = 1.0          # Çok düşük (1.3 yerine)
+    MAX_CONSECUTIVE_LOSSES: int = 50             # Çok yüksek (3 yerine)
     
     # --- Rate Limiting ve Performance Ayarları ---
     MAX_REQUESTS_PER_MINUTE: int = 1200
@@ -187,94 +163,120 @@ class Settings:
 
     @classmethod
     def set_timeframe(cls, timeframe: str):
-        """Zaman dilimini değiştir ve ayarları güncelle"""
+        """Zaman dilimini değiştir"""
         if timeframe in cls.TIMEFRAME_SETTINGS:
             cls.TIMEFRAME = timeframe
-            print(f"🕐 Zaman dilimi {timeframe} olarak ayarlandı")
-            print(f"📊 SL: %{cls().STOP_LOSS_PERCENT*100:.2f} | TP: %{cls().TAKE_PROFIT_PERCENT*100:.2f}")
+            print(f"🕐 DEBUG: Zaman dilimi {timeframe} olarak ayarlandı")
+            print(f"📊 DEBUG SL/TP: %{cls().STOP_LOSS_PERCENT*100:.2f}/%{cls().TAKE_PROFIT_PERCENT*100:.2f}")
             return True
         else:
-            print(f"❌ Geçersiz zaman dilimi: {timeframe}")
+            print(f"❌ DEBUG: Geçersiz zaman dilimi: {timeframe}")
             return False
     
     @classmethod
     def get_risk_reward_ratio(cls) -> float:
-        """Mevcut TP/SL oranına göre risk/reward hesapla"""
+        """Risk/reward hesapla"""
         current = cls.get_current_settings()
         return current["take_profit_percent"] / current["stop_loss_percent"]
     
     @classmethod
     def validate_settings(cls):
-        """Ayarları doğrula ve gerekirse uyar"""
+        """DEBUG: Basit doğrulama"""
         warnings = []
         
         if not cls.API_KEY or not cls.API_SECRET:
-            warnings.append("⚠️ BINANCE_API_KEY veya BINANCE_API_SECRET ayarlanmamış!")
+            warnings.append("⚠️ DEBUG: API anahtarları eksik!")
         
-        if cls.LEVERAGE < 1 or cls.LEVERAGE > 125:
-            warnings.append(f"⚠️ Kaldıraç değeri geçersiz: {cls.LEVERAGE}. 1-125 arası olmalı.")
-        
-        if cls.ORDER_SIZE_USDT < 5:
-            warnings.append(f"⚠️ İşlem miktarı çok düşük: {cls.ORDER_SIZE_USDT}. Minimum 5 USDT önerilir.")
-        
-        # Risk/reward oranı kontrolü
-        current_rr = cls.get_risk_reward_ratio()
-        if current_rr < cls.MIN_RISK_REWARD_RATIO:
-            warnings.append(f"⚠️ Risk/Reward oranı çok düşük: {current_rr:.2f}. Minimum {cls.MIN_RISK_REWARD_RATIO}")
-        
-        # Zaman dilimi kontrolü
-        if cls.TIMEFRAME not in cls.TIMEFRAME_SETTINGS:
-            warnings.append(f"⚠️ Geçersiz zaman dilimi: {cls.TIMEFRAME}")
-        
-        for warning in warnings:
-            print(warning)
-        
+        print(f"🔧 DEBUG: {len(warnings)} uyarı bulundu")
         return len(warnings) == 0
 
     @classmethod
     def print_settings(cls):
-        """Mevcut ayarları yazdır"""
+        """DEBUG ayarlarını yazdır"""
         current = cls.get_current_settings()
         risk_reward = cls.get_risk_reward_ratio()
         
         print("=" * 70)
-        print("🚀 DİNAMİK TP/SL VE GÜÇLENDİRİLMİŞ SAHTEKİ SİNYAL KORUMASLI BOT")
+        print("🔧 DEBUG MOD - SİNYAL ÜRETİM TESTİ")
         print("=" * 70)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
         print(f"💰 İşlem Miktarı: {cls.ORDER_SIZE_USDT} USDT")
         print(f"📈 Kaldıraç: {cls.LEVERAGE}x")
         print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME}")
         print("=" * 70)
-        print("💹 DİNAMİK TP/SL AYARLARI:")
+        print("🔧 DEBUG FİLTRE DURUMU:")
+        print(f"   📊 Trend Filtresi: {'❌ KAPALI' if not cls.TREND_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   ⚡ Momentum Filtresi: {'❌ KAPALI' if not cls.MOMENTUM_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   💪 Trend Gücü: {'❌ KAPALI' if not cls.TREND_STRENGTH_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   🔄 RSI Filtresi: {'❌ KAPALI' if not cls.RSI_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   📊 Hacim Filtresi: {'❌ KAPALI' if not cls.VOLUME_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   🌊 Volatilite: {'❌ KAPALI' if not cls.VOLATILITY_FILTER_ENABLED else '✅ AÇIK'}")
+        print(f"   📈 Min. Hareket: {'❌ KAPALI' if not cls.MIN_PRICE_MOVEMENT_ENABLED else '✅ AÇIK'}")
+        print(f"   ⏳ Soğuma: {'✅ AÇIK (2dk)' if cls.SIGNAL_COOLDOWN_ENABLED else '❌ KAPALI'}")
+        print("=" * 70)
+        print("💹 DEBUG TP/SL AYARLARI:")
         print(f"   🛑 Stop Loss: %{current['stop_loss_percent'] * 100:.2f}")
         print(f"   🎯 Take Profit: %{current['take_profit_percent'] * 100:.2f}")
         print(f"   ⚖️  Risk/Reward: 1:{risk_reward:.2f}")
-        print(f"   ⏳ Soğuma Süresi: {current['cooldown_minutes']} dakika")
-        print(f"   📊 Min. Hareket: %{current['min_price_movement'] * 100:.2f}")
+        print(f"   ⏳ Soğuma: {current['cooldown_minutes']} dakika")
         print("=" * 70)
-        print("🛡️ GÜÇLENDİRİLMİŞ SAHTEKİ SİNYAL KORUMALARI:")
-        print(f"   📊 Trend Filtresi (EMA{cls().TREND_EMA_PERIOD}): {'✅' if cls.TREND_FILTER_ENABLED else '❌'}")
-        print(f"   📈 Min. Fiyat Hareketi: {'✅' if cls.MIN_PRICE_MOVEMENT_ENABLED else '❌'}")
-        print(f"   🔄 RSI Filtresi ({cls.RSI_OVERSOLD}-{cls.RSI_OVERBOUGHT}): {'✅' if cls.RSI_FILTER_ENABLED else '❌'}")
-        print(f"   ⏳ Sinyal Soğuma: {'✅' if cls.SIGNAL_COOLDOWN_ENABLED else '❌'}")
-        print(f"   🌊 Volatilite Filtresi: {'✅' if cls.VOLATILITY_FILTER_ENABLED else '❌'}")
-        print(f"   📊 Hacim Filtresi ({cls.MIN_VOLUME_MULTIPLIER}x): {'✅' if cls.VOLUME_FILTER_ENABLED else '❌'}")
-        print(f"   ⚡ Momentum Filtresi: {'✅' if cls.MOMENTUM_FILTER_ENABLED else '❌'}")
-        print(f"   💪 Trend Gücü Filtresi: {'✅' if cls.TREND_STRENGTH_FILTER_ENABLED else '❌'}")
+        print("🔒 DEBUG RİSK YÖNETİMİ:")
+        print(f"   📊 Max. Günlük Pozisyon: {cls.MAX_DAILY_POSITIONS} (çok yüksek)")
+        print(f"   💸 Max. Günlük Kayıp: %{cls.MAX_DAILY_LOSS_PERCENT * 100} (çok yüksek)")
+        print(f"   🚫 Max. Ardışık Kayıp: {cls.MAX_CONSECUTIVE_LOSSES} (çok yüksek)")
         print("=" * 70)
-        print("🔒 RİSK YÖNETİMİ:")
-        print(f"   📊 Max. Günlük Pozisyon: {cls.MAX_DAILY_POSITIONS}")
-        print(f"   💸 Max. Günlük Kayıp: %{cls.MAX_DAILY_LOSS_PERCENT * 100}")
-        print(f"   ⚖️  Min. Risk/Reward: 1:{cls.MIN_RISK_REWARD_RATIO}")
-        print(f"   🚫 Max. Ardışık Kayıp: {cls.MAX_CONSECUTIVE_LOSSES}")
-        print("=" * 70)
-        print("💡 Bu sistem yalnızca yüksek kazanç potansiyelli pozisyonlara girer")
-        print("🎯 Para kaybetmemek öncelikli hedef - sadece kaliteli sinyaller işlenir")
+        print("🔧 DEBUG MODU: Sinyal üretim testi için tüm kısıtlamalar kaldırıldı")
+        print("⚠️  GERÇEK TİCARET İÇİN KULLANMAYIN!")
         print("=" * 70)
 
 settings = Settings()
 
-# Başlangıçta ayarları doğrula
+# DEBUG modu aktif etme fonksiyonu
+def enable_debug_mode():
+    """Debug modunu aktif et"""
+    print("🔧 DEBUG MODU AKTİF EDİLİYOR...")
+    
+    # Tüm filtreleri kapat
+    settings.TREND_FILTER_ENABLED = False
+    settings.MOMENTUM_FILTER_ENABLED = False
+    settings.TREND_STRENGTH_FILTER_ENABLED = False
+    settings.PRICE_ACTION_FILTER_ENABLED = False
+    settings.MIN_PRICE_MOVEMENT_ENABLED = False
+    settings.RSI_FILTER_ENABLED = False
+    settings.VOLATILITY_FILTER_ENABLED = False
+    settings.VOLUME_FILTER_ENABLED = False
+    
+    # Soğuma süresini minimal yap
+    settings.SIGNAL_COOLDOWN_ENABLED = True
+    
+    # Risk limitlerini çok yüksek yap
+    settings.MAX_DAILY_POSITIONS = 100
+    settings.MAX_CONSECUTIVE_LOSSES = 50
+    settings.MAX_DAILY_LOSS_PERCENT = 0.5
+    
+    print("✅ DEBUG MODU AKTİF - Tüm filtreler devre dışı!")
+
+def disable_debug_mode():
+    """Debug modunu kapat ve normal ayarları geri yükle"""
+    print("🔄 NORMAL MOD GERİ YÜKLENİYOR...")
+    
+    # Filtreleri geri açs
+    settings.TREND_FILTER_ENABLED = True
+    settings.MOMENTUM_FILTER_ENABLED = True
+    settings.TREND_STRENGTH_FILTER_ENABLED = True
+    settings.RSI_FILTER_ENABLED = True
+    settings.VOLATILITY_FILTER_ENABLED = True
+    settings.VOLUME_FILTER_ENABLED = True
+    settings.MIN_PRICE_MOVEMENT_ENABLED = True
+    
+    # Normal risk limitlerini geri yükle
+    settings.MAX_DAILY_POSITIONS = 8
+    settings.MAX_CONSECUTIVE_LOSSES = 3
+    settings.MAX_DAILY_LOSS_PERCENT = 0.05
+    
+    print("✅ NORMAL MOD GERİ YÜKLENDİ")
+
+# Başlangıçta debug ayarlarını göster
 if __name__ == "__main__":
     settings.validate_settings()
     settings.print_settings()
