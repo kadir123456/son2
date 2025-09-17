@@ -1,4 +1,4 @@
-# app/main.py - MULTI-COIN DESTEKLİ VERSİYON
+# app/main.py - MULTI-COIN DESTEKLİ VERSİYON - DÜZELTME
 
 import asyncio
 import time
@@ -93,7 +93,7 @@ class SymbolRequest(BaseModel):
 
 @app.post("/api/multi-start")
 async def start_multi_bot(request: MultiStartRequest, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
-    """Birden fazla coin ile bot başlat"""
+    """DÜZELTME: Birden fazla coin ile bot başlat - daha iyi hata mesajları"""
     if bot_core.status["is_running"]:
         raise HTTPException(status_code=400, detail="Bot zaten çalışıyor.")
     
@@ -103,24 +103,50 @@ async def start_multi_bot(request: MultiStartRequest, background_tasks: Backgrou
     if len(request.symbols) > 20:
         raise HTTPException(status_code=400, detail="Maksimum 20 symbol desteklenir.")
     
-    # Symbolları normalize et
+    # DÜZELTME: Symbolları normalize et ve kontrol et
     normalized_symbols = []
     for symbol in request.symbols:
         symbol = symbol.upper().strip()
+        
+        # USDT eki kontrol et
         if not symbol.endswith('USDT'):
             symbol += 'USDT'
         
+        # Geçerlilik kontrolleri
         if len(symbol) < 6 or len(symbol) > 20:
             raise HTTPException(status_code=400, detail=f"Geçersiz sembol formatı: {symbol}")
+        
+        # Geçerli karakterler kontrolü
+        if not symbol.replace('USDT', '').isalpha():
+            raise HTTPException(status_code=400, detail=f"Geçersiz sembol karakterleri: {symbol}")
         
         if symbol not in normalized_symbols:  # Duplicate kontrolü
             normalized_symbols.append(symbol)
     
+    if len(normalized_symbols) == 0:
+        raise HTTPException(status_code=400, detail="Geçerli sembol bulunamadı.")
+    
     print(f"👤 {user.get('email')} tarafından multi-coin bot başlatılıyor: {', '.join(normalized_symbols)}")
     
-    background_tasks.add_task(bot_core.start, normalized_symbols)
-    await asyncio.sleep(2)
-    return bot_core.get_multi_status()
+    # DÜZELTME: Bot başlatma işlemini background'da yap ama hemen status döndür
+    try:
+        background_tasks.add_task(bot_core.start, normalized_symbols)
+        await asyncio.sleep(2)  # Başlatma için kısa bekle
+        
+        current_status = bot_core.get_multi_status()
+        
+        return {
+            "success": True,
+            "message": f"{len(normalized_symbols)} coin için bot başlatılıyor...",
+            "symbols": normalized_symbols,
+            "user": user.get('email'),
+            "timestamp": time.time(),
+            "status": current_status
+        }
+        
+    except Exception as e:
+        print(f"❌ Bot başlatma hatası: {e}")
+        raise HTTPException(status_code=500, detail=f"Bot başlatılırken hata oluştu: {str(e)}")
 
 @app.post("/api/add-symbol")
 async def add_symbol_to_bot(request: AddSymbolRequest, user: dict = Depends(authenticate)):
@@ -190,6 +216,10 @@ async def get_multi_status(user: dict = Depends(authenticate)):
 async def start_bot(request: dict, background_tasks: BackgroundTasks, user: dict = Depends(authenticate)):
     """Tek symbol için geriye uyumluluk - artık multi-coin olarak çalışır"""
     symbol = request.get("symbol", "").upper().strip()
+    
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol gerekli.")
+        
     if not symbol.endswith('USDT'):
         symbol += 'USDT'
     
@@ -239,19 +269,39 @@ async def get_status(user: dict = Depends(authenticate)):
 
 @app.get("/api/health")
 async def health_check():
-    """Sağlık kontrolü - authentication gerektirmez"""
-    return {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "bot_running": bot_core.status["is_running"],
-        "symbols_count": len(bot_core.status["symbols"]),
-        "active_symbol": bot_core.status["active_symbol"],
-        "position_monitor_running": position_manager.is_running,
-        "websocket_connections": len(bot_core._websocket_connections),
-        "version": "3.0.0"
-    }
+    """DÜZELTME: Sağlık kontrolü - authentication gerektirmez, daha detaylı"""
+    try:
+        # Binance bağlantı testi
+        binance_status = "connected" if bot_core.status["is_running"] else "disconnected"
+        
+        # Pozisyon manager durumu
+        position_manager_status = position_manager.get_status()
+        
+        return {
+            "status": "healthy",
+            "timestamp": time.time(),
+            "bot_running": bot_core.status["is_running"],
+            "symbols_count": len(bot_core.status["symbols"]),
+            "active_symbol": bot_core.status["active_symbol"],
+            "position_monitor_running": position_manager.is_running,
+            "websocket_connections": len(bot_core._websocket_connections),
+            "binance_connection": binance_status,
+            "position_manager": position_manager_status,
+            "environment": settings.ENVIRONMENT,
+            "version": "3.0.0",
+            "debug_mode": getattr(settings, 'DEBUG_MODE', False),
+            "test_mode": getattr(settings, 'TEST_MODE', False)
+        }
+        
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": time.time(),
+            "version": "3.0.0"
+        }
 
-# ============ POZISYON YÖNETİMİ ENDPOINT'LERİ ============
+# ============ POZİSYON YÖNETİMİ ENDPOINT'LERİ ============
 
 @app.post("/api/scan-all-positions")
 async def scan_all_positions(user: dict = Depends(authenticate)):
@@ -355,6 +405,17 @@ async def stop_position_monitor(user: dict = Depends(authenticate)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Monitor durdurma hatası: {e}")
+
+# ============ HATA YÖNETİMİ ============
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    print(f"❌ Genel hata yakalandı: {exc}")
+    return {
+        "error": "Beklenmeyen bir hata oluştu",
+        "detail": str(exc),
+        "timestamp": time.time()
+    }
 
 # ============ STATIC FILES ============
 
