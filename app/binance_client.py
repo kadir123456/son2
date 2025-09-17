@@ -147,6 +147,42 @@ class BinanceClient:
             print(f"❌ {symbol} pozisyon sorgusu genel hatası: {e}")
             return []
 
+    async def cancel_all_orders_safe(self, symbol: str):
+        """DÜZELTME: Tüm açık emirleri güvenli şekilde iptal eder"""
+        try:
+            await self._rate_limit_delay()
+            open_orders = await self.client.futures_get_open_orders(symbol=symbol)
+            if open_orders:
+                order_count = len(open_orders)
+                if self._debug_enabled:
+                    print(f"🧹 {symbol} için {order_count} adet yetim emir temizleniyor...")
+                    
+                await self._rate_limit_delay()
+                result = await self.client.futures_cancel_all_open_orders(symbol=symbol)
+                await asyncio.sleep(0.5)
+                
+                if self._debug_enabled:
+                    print(f"✅ {symbol} tüm yetim emirler temizlendi.")
+                return True
+            else:
+                if self._debug_enabled:
+                    print(f"✅ {symbol} temizlenecek yetim emir yok.")
+                return True
+                
+        except BinanceAPIException as e:
+            if "-1003" in str(e):
+                print(f"⚠️ Rate limit - {symbol} emir iptali atlanıyor")
+                return False
+            elif "-2011" in str(e):
+                print(f"✅ {symbol} zaten açık emir yok")
+                return True
+            else:
+                print(f"❌ {symbol} emirler iptal edilirken hata: {e}")
+                return False
+        except Exception as e:
+            print(f"❌ {symbol} emir iptali genel hatası: {e}")
+            return False
+
     async def get_market_price(self, symbol: str):
         """DÜZELTME: Daha iyi hata yakalama ile market fiyatı al"""
         try:
@@ -463,7 +499,240 @@ class BinanceClient:
             await self.cancel_all_orders_safe(symbol)
             return None
 
-    # DİĞER METODLAR AYNI KALIYOR... (close_position, cancel_all_orders_safe, get_account_balance, vb.)
-    # Sadece kritik kısımları düzelttim, geri kalan kodları aynı şekilde tutabilirsiniz
+    async def close_position(self, symbol: str, position_amt: float, side_to_close: str):
+        """DÜZELTME: Pozisyon kapatır - YETİM EMİR TEMİZLİĞİ İLE"""
+        try:
+            # 🧹 ADIM 1: Pozisyon kapatmadan önce açık emirleri temizle
+            if self._debug_enabled:
+                print(f"🧹 {symbol} pozisyon kapatma öncesi yetim emir temizliği...")
+            await self.cancel_all_orders_safe(symbol)
+            await asyncio.sleep(0.2)
+            
+            # Test modu kontrolü
+            if hasattr(settings, 'TEST_MODE') and settings.TEST_MODE:
+                print(f"🧪 TEST MODU: {symbol} pozisyon kapatma simüle edildi")
+                return {"orderId": "TEST_CLOSE_" + str(int(time.time())), "status": "FILLED"}
+            
+            # 📉 ADIM 2: Pozisyonu kapat
+            print(f"📉 {symbol} pozisyonu kapatılıyor: {abs(position_amt)} miktar")
+            await self._rate_limit_delay()
+            response = await self.client.futures_create_order(
+                symbol=symbol,
+                side=side_to_close,
+                type='MARKET',
+                quantity=abs(position_amt),
+                reduceOnly=True
+            )
+            
+            if response and 'orderId' in response:
+                print(f"✅ POZİSYON KAPATILDI: {symbol} (ID: {response['orderId']})")
+            else:
+                print(f"⚠️ {symbol} pozisyon kapatıldı ama ID alınamadı")
+            
+            # 🧹 ADIM 3: Kapanış sonrası ekstra temizlik (ihtiyaten)
+            await asyncio.sleep(0.5)
+            await self.cancel_all_orders_safe(symbol)
+            
+            # 💾 ADIM 4: Cache temizle
+            if symbol in self._cached_positions:
+                del self._cached_positions[symbol]
+            if symbol in self._last_position_check:
+                del self._last_position_check[symbol]
+            
+            return response
+            
+        except BinanceAPIException as e:
+            print(f"❌ {symbol} pozisyon kapatma hatası: {e}")
+            # Hata durumunda yine de temizlik yap
+            print("🧹 Hata sonrası acil yetim emir temizliği...")
+            await self.cancel_all_orders_safe(symbol)
+            return None
+        except Exception as e:
+            print(f"❌ {symbol} pozisyon kapatma genel hatası: {e}")
+            await self.cancel_all_orders_safe(symbol)
+            return None
+
+    async def get_last_trade_pnl(self, symbol: str) -> float:
+        """DÜZELTME: Son işlem PnL'ini al - gelişmiş hata yakalama"""
+        try:
+            await self._rate_limit_delay()
+            trades = await self.client.futures_account_trades(symbol=symbol, limit=5)
+            if trades:
+                last_order_id = trades[-1]['orderId']
+                pnl = 0.0
+                for trade in reversed(trades):
+                    if trade['orderId'] == last_order_id:
+                        pnl += float(trade['realizedPnl'])
+                    else:
+                        break
+                        
+                if self._debug_enabled:
+                    print(f"📊 {symbol} son işlem PnL: {pnl}")
+                return pnl
+            return 0.0
+            
+        except BinanceAPIException as e:
+            if "-1003" in str(e):
+                print(f"⚠️ Rate limit - {symbol} PNL sorgusu atlanıyor")
+                return 0.0
+            else:
+                print(f"❌ Hata: {symbol} son işlem PNL'i alınamadı: {e}")
+                return 0.0
+        except Exception as e:
+            print(f"❌ {symbol} PNL sorgusu genel hatası: {e}")
+            return 0.0
+
+    async def get_account_balance(self, use_cache: bool = True):
+        """DÜZELTME: Hesap bakiyesini getirir - cache desteği ile"""
+        try:
+            current_time = time.time()
+            
+            # Cache kontrolü (10 saniye cache)
+            if use_cache and current_time - self._last_balance_check < 10:
+                if self._debug_enabled:
+                    print(f"💾 Bakiye cache'den alındı: {self._cached_balance}")
+                return self._cached_balance
+            
+            await self._rate_limit_delay()
+            account = await self.client.futures_account()
+            
+            if not account or 'assets' not in account:
+                print("❌ Hesap bilgileri alınamadı")
+                return self._cached_balance
+                
+            total_balance = 0.0
+            for asset in account['assets']:
+                if asset['asset'] == 'USDT':
+                    total_balance = float(asset['walletBalance'])
+                    break
+            
+            # Cache güncelle
+            self._last_balance_check = current_time
+            self._cached_balance = total_balance
+            
+            if self._debug_enabled:
+                print(f"💰 Güncel bakiye: {total_balance} USDT")
+            
+            return total_balance
+            
+        except BinanceAPIException as e:
+            if "-1003" in str(e):
+                # Rate limit durumunda cache'den döndür
+                print(f"⚠️ Rate limit - bakiye cache'den döndürülüyor: {self._cached_balance}")
+                return self._cached_balance
+            else:
+                print(f"❌ Hata: Hesap bakiyesi alınamadı: {e}")
+                return self._cached_balance
+        except Exception as e:
+            print(f"❌ Bakiye sorgusu genel hatası: {e}")
+            return self._cached_balance
+
+    async def get_position_pnl(self, symbol: str, use_cache: bool = True):
+        """DÜZELTME: Açık pozisyonun anlık PnL'ini getirir - cache desteği ile"""
+        try:
+            current_time = time.time()
+            cache_key = f"{symbol}_pnl"
+            
+            # Cache kontrolü (3 saniye cache)
+            if use_cache and cache_key in self._last_position_check:
+                if current_time - self._last_position_check[cache_key] < 3:
+                    cached_pnl = self._cached_positions.get(cache_key, 0.0)
+                    if self._debug_enabled:
+                        print(f"💾 {symbol} PnL cache'den alındı: {cached_pnl}")
+                    return cached_pnl
+            
+            await self._rate_limit_delay()
+            positions = await self.client.futures_position_information(symbol=symbol)
+            
+            if not positions:
+                print(f"⚠️ {symbol} için pozisyon bilgisi alınamadı")
+                return 0.0
+                
+            pnl = 0.0
+            for position in positions:
+                if float(position['positionAmt']) != 0:
+                    pnl = float(position['unRealizedProfit'])
+                    break
+            
+            # Cache güncelle
+            self._last_position_check[cache_key] = current_time
+            self._cached_positions[cache_key] = pnl
+            
+            if self._debug_enabled:
+                print(f"📊 {symbol} anlık PnL: {pnl}")
+            
+            return pnl
+            
+        except BinanceAPIException as e:
+            if "-1003" in str(e):
+                # Rate limit durumunda cache'den döndür
+                cached_pnl = self._cached_positions.get(f"{symbol}_pnl", 0.0)
+                print(f"⚠️ Rate limit - {symbol} PnL cache'den döndürülüyor: {cached_pnl}")
+                return cached_pnl
+            else:
+                print(f"❌ Hata: {symbol} pozisyon PnL'i alınamadı: {e}")
+                return 0.0
+        except Exception as e:
+            print(f"❌ {symbol} PnL sorgusu genel hatası: {e}")
+            return 0.0
+
+    async def force_cleanup_orders(self, symbol: str):
+        """DÜZELTME: ACIL DURUM: Tüm açık emirleri zorla temizler"""
+        try:
+            print(f"🚨 {symbol} için ZORLA YETİM EMİR TEMİZLİĞİ başlatılıyor...")
+            max_attempts = 3
+            
+            for attempt in range(max_attempts):
+                print(f"🧹 Temizlik denemesi {attempt + 1}/{max_attempts}")
+                
+                # Açık emirleri kontrol et
+                await self._rate_limit_delay()
+                open_orders = await self.client.futures_get_open_orders(symbol=symbol)
+                
+                if not open_orders:
+                    print(f"✅ {symbol} için yetim emir kalmadı.")
+                    return True
+                
+                print(f"🎯 {len(open_orders)} adet yetim emir tespit edildi.")
+                
+                # Tek tek iptal etmeyi dene
+                for order in open_orders:
+                    try:
+                        await self._rate_limit_delay()
+                        await self.client.futures_cancel_order(
+                            symbol=symbol, 
+                            orderId=order['orderId']
+                        )
+                        if self._debug_enabled:
+                            print(f"✅ Emir iptal edildi: {order['orderId']}")
+                    except Exception as order_error:
+                        print(f"⚠️ Emir iptal hatası: {order_error}")
+                
+                # Toplu iptal dene
+                try:
+                    await self._rate_limit_delay()
+                    await self.client.futures_cancel_all_open_orders(symbol=symbol)
+                    print("🧹 Toplu iptal komutu gönderildi")
+                except Exception as batch_error:
+                    print(f"⚠️ Toplu iptal hatası: {batch_error}")
+                
+                await asyncio.sleep(1)  # Sonraki deneme için bekle
+            
+            print(f"⚠️ {max_attempts} deneme sonrası bazı yetim emirler kalabilir.")
+            return False
+            
+        except Exception as e:
+            print(f"❌ Zorla temizlik hatası: {e}")
+            return False
+
+    async def close(self):
+        """Bağlantıyı kapat"""
+        if self.client:
+            try:
+                await self.client.close_connection()
+                self.client = None
+                print("✅ Binance AsyncClient bağlantısı kapatıldı.")
+            except Exception as e:
+                print(f"⚠️ Bağlantı kapatılırken hata: {e}")
 
 binance_client = BinanceClient()
