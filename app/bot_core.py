@@ -36,6 +36,7 @@ class BotCore:
         self._websocket_connections = {}  # Her symbol için WebSocket bağlantısı
         self._websocket_tasks = []  # WebSocket task'ları
         self._max_reconnect_attempts = 10
+        self._debug_enabled = True  # Debug logging
         print("🛡️ Sahte Sinyal Korumalı Bot Core başlatıldı")
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
@@ -58,10 +59,11 @@ class BotCore:
             
             final_size = max(min(dynamic_size, max_size), min_size)
             
-            print(f"💰 Dinamik pozisyon hesaplama:")
-            print(f"   Mevcut bakiye: {current_balance:.2f} USDT")
-            print(f"   %90'ı: {dynamic_size:.2f} USDT")
-            print(f"   Kullanılacak tutar: {final_size:.2f} USDT")
+            if self._debug_enabled:
+                print(f"💰 Dinamik pozisyon hesaplama:")
+                print(f"   Mevcut bakiye: {current_balance:.2f} USDT")
+                print(f"   %90'ı: {dynamic_size:.2f} USDT")
+                print(f"   Kullanılacak tutar: {final_size:.2f} USDT")
             
             self.status["order_size"] = final_size
             return final_size
@@ -145,13 +147,17 @@ class BotCore:
                     self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
                     print(f"✅ {symbol} bilgileri alındı (Q:{self.quantity_precision[symbol]}, P:{self.price_precision[symbol]})")
                     
-                    # Geçmiş veri çekme - sahte sinyal koruması için daha fazla veri
-                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
-                    if klines:
+                    # DÜZELTME: Daha fazla geçmiş veri çek - strateji için yeterli olsun
+                    klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=200)
+                    if klines and len(klines) >= 50:  # Minimum 50 mum kontrolü
                         self.multi_klines[symbol] = klines
                         print(f"✅ {symbol} için {len(klines)} geçmiş mum verisi alındı")
+                        
+                        # İlk analiz test et
+                        test_signal = trading_strategy.analyze_klines(klines, symbol)
+                        print(f"🧪 {symbol} test analizi: {test_signal}")
                     else:
-                        print(f"❌ {symbol} için geçmiş veri alınamadı. Atlanıyor...")
+                        print(f"❌ {symbol} için yetersiz geçmiş veri ({len(klines) if klines else 0}). Atlanıyor...")
                         continue
                         
                     await asyncio.sleep(0.2)  # Rate limit koruması
@@ -222,7 +228,7 @@ class BotCore:
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
                 
-            self.status["status_message"] = f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [🛡️ SAHTE SİNYAL KORUMASII + DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
+            self.status["status_message"] = f"{len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [🛡️ GELİŞMİŞ SAHTE SİNYAL KORUMASII + DİNAMİK SİZING + YETİM EMİR KORUMASII + OTOMATIK TP/SL AKTİF]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_multi_websocket_loop(valid_symbols)
@@ -357,7 +363,7 @@ class BotCore:
             await binance_client.close()
 
     async def _handle_single_websocket_message(self, symbol: str, message: str):
-        """🛡️ Sahte sinyal korumalı WebSocket mesaj işleme"""
+        """🛡️ DÜZELTME: Sahte sinyal korumalı WebSocket mesaj işleme"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
@@ -372,18 +378,39 @@ class BotCore:
             if not kline_data.get('x', False):
                 return
                 
-            print(f"📊 {symbol} yeni mum kapandı ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
+            if self._debug_enabled:
+                print(f"📊 {symbol} yeni mum kapandı ({settings.TIMEFRAME}) - Kapanış: {kline_data['c']}")
             
-            # Bu symbol için kline data güncelle
+            # DÜZELTME: Bu symbol için kline data güncelle - doğru format
             if symbol not in self.multi_klines:
                 self.multi_klines[symbol] = []
             
-            self.multi_klines[symbol].pop(0) if len(self.multi_klines[symbol]) >= 100 else None
-            self.multi_klines[symbol].append([
-                kline_data[key] for key in ['t','o','h','l','c','v','T','q','n','V','Q']
-            ] + ['0'])
+            # Eski veriyi sil (max 200 mum tut)
+            if len(self.multi_klines[symbol]) >= 200:
+                self.multi_klines[symbol].pop(0)
+                
+            # DÜZELTME: Yeni kline verisini doğru formatta ekle
+            new_kline = [
+                int(kline_data['t']),      # open_time
+                float(kline_data['o']),    # open
+                float(kline_data['h']),    # high
+                float(kline_data['l']),    # low
+                float(kline_data['c']),    # close
+                float(kline_data['v']),    # volume
+                int(kline_data['T']),      # close_time
+                float(kline_data['q']),    # quote_asset_volume
+                int(kline_data['n']),      # number_of_trades
+                float(kline_data['V']),    # taker_buy_base_asset_volume
+                float(kline_data['Q']),    # taker_buy_quote_asset_volume
+                '0'                        # ignore
+            ]
             
-            # 🛡️ SAHTe SİNYAL KORUMASLI ANALİZ - symbol bilgisi ile
+            self.multi_klines[symbol].append(new_kline)
+            
+            if self._debug_enabled:
+                print(f"🔍 {symbol} toplam mum sayısı: {len(self.multi_klines[symbol])}")
+            
+            # 🛡️ GELIŞMIŞ SAHTE SİNYAL KORUMASLI ANALİZ
             signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
             
             # Önceki sinyal ile karşılaştır
@@ -397,20 +424,29 @@ class BotCore:
                     print(f"🎯 {symbol} yeni onaylanmış sinyal: {previous_signal} -> {signal}")
             
             self.status["last_signals"][symbol] = signal
-            print(f"🔍 {symbol} strateji analizi: {signal}")
+            
+            if self._debug_enabled:
+                print(f"🔍 {symbol} final strateji sonucu: {signal}")
 
             # ÇOK ÖNEMLİ: Pozisyon yönetimi - Multi-coin mantığı
             await self._handle_multi_coin_position_logic(symbol, signal)
                 
         except Exception as e:
             print(f"❌ {symbol} WebSocket mesaj işlenirken hata: {e}")
+            if self._debug_enabled:
+                print(f"🔍 Detay: {traceback.format_exc()}")
 
     async def _handle_multi_coin_position_logic(self, signal_symbol: str, signal: str):
-        """Multi-coin pozisyon yönetim mantığı"""
+        """Multi-coin pozisyon yönetim mantığı - DÜZELTME"""
         try:
             # Mevcut durum kontrolü
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
+            
+            if self._debug_enabled:
+                print(f"🔍 Pozisyon mantığı: {signal_symbol} -> {signal}")
+                print(f"    Mevcut aktif: {current_active_symbol}")
+                print(f"    Mevcut pozisyon: {current_position_side}")
             
             # DURUM 1: Hiç pozisyon yok, yeni sinyal geldi
             if not current_active_symbol and not current_position_side and signal != "HOLD":
@@ -467,9 +503,11 @@ class BotCore:
                         
         except Exception as e:
             print(f"❌ Multi-coin pozisyon mantığı hatası: {e}")
+            if self._debug_enabled:
+                print(f"🔍 Detay: {traceback.format_exc()}")
 
     async def _open_new_position(self, symbol: str, signal: str):
-        """Yeni pozisyon açma"""
+        """Yeni pozisyon açma - DÜZELTME: Daha detaylı logging"""
         try:
             print(f"🎯 {symbol} için yeni {signal} pozisyonu açılıyor...")
             
@@ -481,6 +519,10 @@ class BotCore:
             # Dinamik order size hesapla
             dynamic_order_size = await self._calculate_dynamic_order_size()
             
+            if dynamic_order_size < 5.0:
+                print(f"❌ {symbol} için hesaplanan pozisyon boyutu çok düşük: {dynamic_order_size}")
+                return False
+            
             # Pozisyon aç
             side = "BUY" if signal == "LONG" else "SELL"
             price = await binance_client.get_market_price(symbol)
@@ -488,10 +530,18 @@ class BotCore:
                 print(f"❌ {symbol} için fiyat alınamadı.")
                 return False
                 
+            print(f"💰 {symbol} pozisyon detayları:")
+            print(f"   Fiyat: {price}")
+            print(f"   Yön: {side}")
+            print(f"   Tutar: {dynamic_order_size} USDT")
+            print(f"   Kaldıraç: {settings.LEVERAGE}x")
+                
             quantity = self._format_quantity(symbol, (dynamic_order_size * settings.LEVERAGE) / price)
             if quantity <= 0:
-                print(f"❌ {symbol} için hesaplanan miktar çok düşük.")
+                print(f"❌ {symbol} için hesaplanan miktar çok düşük: {quantity}")
                 return False
+
+            print(f"   Miktar: {quantity}")
 
             # YETİM EMİR KORUMASLI pozisyon açma
             order = await binance_client.create_market_order_with_sl_tp(
@@ -501,7 +551,7 @@ class BotCore:
             if order:
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"YENİ {signal} POZİSYONU: {symbol} @ {price} (Tutar: {dynamic_order_size:.2f} USDT) [🛡️ SAHTE SİNYAL KORUMASII + OTOMATIK TP/SL KORUMASII AKTİF]"
+                self.status["status_message"] = f"YENİ {signal} POZİSYONU: {symbol} @ {price} (Tutar: {dynamic_order_size:.2f} USDT) [🛡️ GELİŞMİŞ KORUMA AKTİF]"
                 print(f"✅ {self.status['status_message']}")
                 
                 # Cache temizle
@@ -525,6 +575,8 @@ class BotCore:
                 
         except Exception as e:
             print(f"❌ {symbol} yeni pozisyon açma hatası: {e}")
+            if self._debug_enabled:
+                print(f"🔍 Detay: {traceback.format_exc()}")
             await binance_client.force_cleanup_orders(symbol)
             return False
 
@@ -670,10 +722,10 @@ class BotCore:
             self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
             self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
             
-            # Geçmiş veri çekme - sahte sinyal koruması için 100 mum
-            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=100)
-            if not klines:
-                return {"success": False, "message": f"{symbol} için geçmiş veri alınamadı"}
+            # Geçmiş veri çekme - strateji için yeterli
+            klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=200)
+            if not klines or len(klines) < 50:
+                return {"success": False, "message": f"{symbol} için yetersiz geçmiş veri"}
             
             self.multi_klines[symbol] = klines
             
