@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import math
 import time
 import traceback
+from threading import Lock
 
 class BotCore:
     def __init__(self):
@@ -39,10 +40,21 @@ class BotCore:
         self._websocket_connections = {}  # Her symbol için WebSocket bağlantısı
         self._websocket_tasks = []  # WebSocket task'ları
         self._max_reconnect_attempts = 10
-        self._debug_enabled = settings.DEBUG_MODE
-        print("🎯 BOLLINGER BANDS TRADING BOT v3.1 başlatıldı")
+        self._debug_enabled = settings.DEBUG_MODE if hasattr(settings, 'DEBUG_MODE') else True
+        
+        # ✅ PERFORMANCE OPTIMIZATION EKLEMELER
+        self._calculation_lock = Lock()  # Thread safety için
+        self._last_balance_calculation = 0  # Son hesaplama zamanı
+        self._cached_order_size = 0.0  # Cache'lenmiş order size
+        self._balance_calculation_interval = 45  # 45 saniye interval
+        self._calculation_in_progress = False  # Hesaplama devam ediyor mu?
+        self._last_signal_time = {}  # Signal throttling için
+        self._signal_count_per_minute = {}  # Dakikada sinyal sayısı
+        
+        print("🚀 PERFORMANCE OPTIMIZED Bollinger Bands Bot v3.2 başlatıldı")
         print(f"📊 Strateji: BB Period={settings.BOLLINGER_PERIOD}, StdDev={settings.BOLLINGER_STD_DEV}")
         print(f"💰 Risk/Reward: SL=%{settings.STOP_LOSS_PERCENT*100:.1f} / TP=%{settings.TAKE_PROFIT_PERCENT*100:.1f}")
+        print(f"⚡ Performance: Cache={self._balance_calculation_interval}s, Rate Limit Protected")
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
         for f in symbol_info['filters']:
@@ -54,34 +66,53 @@ class BotCore:
         return 0
 
     async def _calculate_dynamic_order_size(self):
-        """Dinamik pozisyon boyutu hesapla - bakiyenin %90'ı"""
-        try:
-            current_balance = await binance_client.get_account_balance(use_cache=False)
-            dynamic_size = current_balance * 0.9
+        """✅ OPTIMIZE: Dinamik pozisyon boyutu hesapla - Cache ve rate limit korumalı"""
+        
+        # Thread safety kontrolü
+        if self._calculation_in_progress:
+            return self._cached_order_size if self._cached_order_size > 0 else settings.ORDER_SIZE_USDT
+        
+        current_time = time.time()
+        
+        # Cache kontrolü - 45 saniyede bir hesapla
+        if (current_time - self._last_balance_calculation < self._balance_calculation_interval and 
+            self._cached_order_size > 0):
+            return self._cached_order_size
+        
+        # Hesaplama başlat - thread safe
+        with self._calculation_lock:
+            self._calculation_in_progress = True
             
-            min_size = 10.0  # Bollinger Bands için minimum arttırıldı
-            max_size = 2000.0  # Maksimum arttırıldı
-            
-            final_size = max(min(dynamic_size, max_size), min_size)
-            
-            if self._debug_enabled:
-                print(f"💰 BOLLINGER BANDS Dinamik pozisyon hesaplama:")
-                print(f"   Mevcut bakiye: {current_balance:.2f} USDT")
-                print(f"   %90'ı: {dynamic_size:.2f} USDT")
-                print(f"   Kullanılacak tutar: {final_size:.2f} USDT")
-                print(f"   Kaldıraçlı pozisyon: {final_size * settings.LEVERAGE:.2f} USDT")
-            
-            self.status["order_size"] = final_size
-            return final_size
-            
-        except Exception as e:
-            print(f"❌ Dinamik pozisyon hesaplama hatası: {e}")
-            fallback_size = settings.ORDER_SIZE_USDT
-            self.status["order_size"] = fallback_size
-            return fallback_size
+            try:
+                current_balance = await binance_client.get_account_balance(use_cache=True)
+                dynamic_size = current_balance * 0.9
+                
+                min_size = 15.0  # Minimum
+                max_size = 1000.0
+                
+                final_size = max(min(dynamic_size, max_size), min_size)
+                
+                # Cache güncelle
+                self._cached_order_size = final_size
+                self._last_balance_calculation = current_time
+                self.status["order_size"] = final_size
+                
+                if self._debug_enabled:
+                    print(f"💰 Dinamik pozisyon hesaplandı: {final_size:.2f} USDT (Sonraki: {self._balance_calculation_interval}s)")
+                
+                return final_size
+                
+            except Exception as e:
+                print(f"❌ Dinamik pozisyon hesaplama hatası: {e}")
+                fallback_size = settings.ORDER_SIZE_USDT
+                self._cached_order_size = fallback_size
+                self.status["order_size"] = fallback_size
+                return fallback_size
+            finally:
+                self._calculation_in_progress = False
 
     async def start(self, symbols: list):
-        """Multi-coin Bollinger Bands bot başlatma"""
+        """Multi-coin Bollinger Bands bot başlatma - Performance Optimized"""
         if self.status["is_running"]:
             print("⚠️ Bollinger Bands bot zaten çalışıyor.")
             return
@@ -121,10 +152,6 @@ class BotCore:
             for symbol in symbols:
                 try:
                     cleanup_result = await binance_client.cancel_all_orders_safe(symbol)
-                    if cleanup_result:
-                        print(f"✅ {symbol} yetim emir temizliği başarılı")
-                    else:
-                        print(f"⚠️ {symbol} yetim emir temizliği eksik - devam ediliyor")
                     await asyncio.sleep(0.2)
                 except Exception as cleanup_error:
                     print(f"⚠️ {symbol} temizlik hatası: {cleanup_error} - devam ediliyor")
@@ -153,20 +180,18 @@ class BotCore:
                     # Precision hesaplama
                     self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
                     self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
-                    print(f"✅ {symbol} precision: Miktar={self.quantity_precision[symbol]}, Fiyat={self.price_precision[symbol]}")
                     
-                    # Bollinger Bands için yeterli geçmiş veri çek
-                    required_candles = max(settings.BOLLINGER_PERIOD + 20, 60)  # En az 60 mum
+                    # Bollinger Bands için geçmiş veri çek
+                    required_candles = max(settings.BOLLINGER_PERIOD + 20, 50)
                     klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=required_candles)
                     if klines and len(klines) >= required_candles - 10:
                         self.multi_klines[symbol] = klines
-                        print(f"✅ {symbol} için {len(klines)} geçmiş mum verisi alındı")
+                        print(f"✅ {symbol} hazır ({len(klines)} mum)")
                         
                         # İlk Bollinger Bands analizi test et
                         test_signal = trading_strategy.analyze_klines(klines, symbol)
-                        print(f"🧪 {symbol} ilk Bollinger analizi: {test_signal}")
                     else:
-                        print(f"❌ {symbol} için yetersiz geçmiş veri ({len(klines) if klines else 0}/{required_candles}). Atlanıyor...")
+                        print(f"❌ {symbol} yetersiz veri. Atlanıyor...")
                         continue
                         
                     await asyncio.sleep(0.2)  # Rate limit koruması
@@ -195,12 +220,8 @@ class BotCore:
                         
                     self.status["active_symbol"] = active_symbol
                     print(f"⚠️ Mevcut {self.status['position_side']} pozisyonu tespit edildi: {active_symbol}")
-                    print("Bollinger Bands stratejisi mevcut pozisyonla devam ediyor...")
                     
-                    # Mevcut pozisyon için yetim emirleri temizle ve TP/SL kontrol et
-                    print(f"🧹 {active_symbol} mevcut pozisyon için ekstra yetim emir temizliği...")
-                    await binance_client.cancel_all_orders_safe(active_symbol)
-                    
+                    # Mevcut pozisyon için TP/SL kontrol et
                     print(f"🛡️ {active_symbol} mevcut pozisyon için TP/SL kontrolü...")
                     await position_manager.manual_scan_symbol(active_symbol)
                 else:
@@ -210,9 +231,7 @@ class BotCore:
                     for symbol in symbols:
                         if symbol in self.multi_klines:  # Sadece başarılı symboller için
                             if await binance_client.set_leverage(symbol, settings.LEVERAGE):
-                                print(f"✅ {symbol} kaldıracı {settings.LEVERAGE}x olarak ayarlandı")
-                            else:
-                                print(f"⚠️ {symbol} kaldıracı ayarlanamadı, mevcut kaldıraçla devam ediliyor")
+                                print(f"✅ {symbol} kaldıracı {settings.LEVERAGE}x")
                             await asyncio.sleep(0.3)
                             
             except Exception as position_error:
@@ -229,14 +248,14 @@ class BotCore:
                 print(f"⚠️ Position monitoring başlatılamadı: {monitor_error}")
                 
             # 8. Multi-WebSocket bağlantıları başlat
-            print("8️⃣ 🌐 Bollinger Bands Multi-coin WebSocket bağlantıları kuruluyor...")
+            print("8️⃣ 🌐 Bollinger Bands Multi-coin WebSocket kuruluyor...")
             valid_symbols = [s for s in symbols if s in self.multi_klines]
             self.status["symbols"] = valid_symbols
             
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
                 
-            self.status["status_message"] = f"🎯 BOLLINGER BANDS: {len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [SL:%{settings.STOP_LOSS_PERCENT*100:.1f} TP:%{settings.TAKE_PROFIT_PERCENT*100:.1f} | ULTRA ESNEK FİLTRELER + DİNAMİK SİZING + OTOMATIK TP/SL]"
+            self.status["status_message"] = f"🎯 BOLLINGER BANDS: {len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [⚡ PERFORMANCE OPTIMIZED + ULTRA ESNEK FİLTRELER + OTOMATIK TP/SL]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_multi_websocket_loop(valid_symbols)
@@ -271,17 +290,17 @@ class BotCore:
         ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
         reconnect_attempts = 0
         
-        print(f"🔗 {symbol} Bollinger WebSocket bağlantısı başlatılıyor...")
+        print(f"🔗 {symbol} Bollinger WebSocket başlatılıyor...")
         
         while not self._stop_requested and reconnect_attempts < self._max_reconnect_attempts:
             try:
                 async with websockets.connect(
                     ws_url, 
-                    ping_interval=30, 
-                    ping_timeout=15,
-                    close_timeout=10
+                    ping_interval=settings.WEBSOCKET_PING_INTERVAL, 
+                    ping_timeout=settings.WEBSOCKET_PING_TIMEOUT,
+                    close_timeout=settings.WEBSOCKET_CLOSE_TIMEOUT
                 ) as ws:
-                    print(f"✅ {symbol} Bollinger WebSocket bağlantısı kuruldu")
+                    print(f"✅ {symbol} Bollinger WebSocket bağlandı")
                     reconnect_attempts = 0
                     self._websocket_connections[symbol] = ws
                     
@@ -290,44 +309,40 @@ class BotCore:
                             message = await asyncio.wait_for(ws.recv(), timeout=65.0)
                             await self._handle_single_websocket_message(symbol, message)
                         except asyncio.TimeoutError:
-                            print(f"⏰ {symbol} WebSocket timeout - ping gönderiliyor...")
                             try:
                                 await ws.ping()
                                 await asyncio.sleep(1)
                             except:
-                                print(f"❌ {symbol} WebSocket ping başarısız - yeniden bağlanılıyor...")
                                 break
                         except websockets.exceptions.ConnectionClosed:
-                            print(f"🔌 {symbol} WebSocket bağlantısı koptu...")
                             break
                         except Exception as e:
-                            print(f"❌ {symbol} WebSocket mesaj işleme hatası: {e}")
+                            print(f"❌ {symbol} WebSocket mesaj hatası: {e}")
                             await asyncio.sleep(1)
                             
             except Exception as e:
                 if not self._stop_requested:
                     reconnect_attempts += 1
                     backoff_time = min(5 * reconnect_attempts, 30)
-                    print(f"❌ {symbol} WebSocket bağlantı hatası (Deneme {reconnect_attempts}/{self._max_reconnect_attempts}): {e}")
                     if reconnect_attempts < self._max_reconnect_attempts:
-                        print(f"⏳ {symbol} için {backoff_time} saniye sonra yeniden deneniyor...")
+                        print(f"⏳ {symbol} yeniden bağlanılıyor... ({backoff_time}s)")
                         await asyncio.sleep(backoff_time)
             finally:
                 if symbol in self._websocket_connections:
                     del self._websocket_connections[symbol]
         
         if reconnect_attempts >= self._max_reconnect_attempts:
-            print(f"❌ {symbol} WebSocket maksimum yeniden bağlanma denemesi aşıldı")
+            print(f"❌ {symbol} WebSocket maksimum deneme aşıldı")
 
     async def _handle_single_websocket_message(self, symbol: str, message: str):
-        """🎯 BOLLINGER BANDS: Gelişmiş WebSocket mesaj işleme + Debug"""
+        """✅ OPTIMIZE: WebSocket mesaj işleme - Performance optimized"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
             
-            # Durum bilgilerini güncelle
+            # Daha az sıklıkla status update
             current_time = time.time()
-            if current_time - self._last_status_update > 10:
+            if current_time - self._last_status_update > settings.STATUS_UPDATE_INTERVAL:
                 await self._update_status_info()
                 self._last_status_update = current_time
             
@@ -335,16 +350,13 @@ class BotCore:
             if not kline_data.get('x', False):
                 return
                 
-            if self._debug_enabled:
-                print(f"🕯️ {symbol} YENİ MUM KAPANDI ({settings.TIMEFRAME})")
-                print(f"   📊 OHLCV: O:{kline_data['o']} H:{kline_data['h']} L:{kline_data['l']} C:{kline_data['c']} V:{kline_data['v']}")
-            
             # Kline data güncelle
             if symbol not in self.multi_klines:
                 self.multi_klines[symbol] = []
             
-            # Eski veriyi sil (max 200 mum tut)
-            if len(self.multi_klines[symbol]) >= 200:
+            # Memory optimization - max klines sınırı
+            max_klines = getattr(settings, 'MAX_KLINES_PER_SYMBOL', 150)
+            if len(self.multi_klines[symbol]) >= max_klines:
                 self.multi_klines[symbol].pop(0)
                 
             # Yeni kline verisini ekle
@@ -365,57 +377,67 @@ class BotCore:
             
             self.multi_klines[symbol].append(new_kline)
             
-            if self._debug_enabled:
-                print(f"📊 {symbol} Toplam mum sayısı: {len(self.multi_klines[symbol])}")
-            
-            # Minimum veri kontrolü - Bollinger Bands için
-            min_required = max(settings.BOLLINGER_PERIOD + 15, 40)
+            # Minimum veri kontrolü
+            min_required = max(settings.BOLLINGER_PERIOD + 10, 35)
             if len(self.multi_klines[symbol]) < min_required:
-                if self._debug_enabled:
-                    print(f"⏳ {symbol} Bollinger Bands için henüz yeterli veri yok ({len(self.multi_klines[symbol])}/{min_required})")
                 return
             
-            # 🎯 BOLLINGER BANDS STRATEJİSİ ANALİZİ
-            if self._debug_enabled:
-                print(f"🔍 {symbol} BOLLINGER BANDS ANALİZİ BAŞLATIYOR...")
-                print(f"    BB Period: {settings.BOLLINGER_PERIOD}")
-                print(f"    Std Dev: {settings.BOLLINGER_STD_DEV}")
-                print(f"    Entry Levels: Lower<{settings.BB_ENTRY_LOWER} Upper>{settings.BB_ENTRY_UPPER}")
+            # Signal throttling kontrolü
+            if not self._can_generate_signal(symbol):
+                return
             
+            # Bollinger Bands analizi
             signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
             
             # Önceki sinyal ile karşılaştır
             previous_signal = self.status["last_signals"].get(symbol, "HOLD")
             
-            if self._debug_enabled:
-                print(f"📊 {symbol} BOLLINGER SİNYAL RAPORU:")
-                print(f"    Önceki: {previous_signal}")
-                print(f"    Yeni: {signal}")
-            
+            # Sadece sinyal değişikliğinde işlem yap
             if signal != previous_signal:
                 if signal == "HOLD":
                     self.status["filtered_signals_count"] += 1
-                    print(f"🛡️ {symbol} Bollinger sinyali filtrelendi - toplam filtrelenen: {self.status['filtered_signals_count']}")
+                    if self._debug_enabled:
+                        print(f"🛡️ {symbol} filtrelendi - toplam: {self.status['filtered_signals_count']}")
                 else:
                     self.status["bollinger_signals_count"] += 1
-                    print(f"🚨 {symbol} YENİ BOLLINGER BANDS SİNYALİ: {previous_signal} -> {signal}")
-                    print(f"🎯 Toplam Bollinger sinyalleri: {self.status['bollinger_signals_count']}")
-                    print(f"🔄 {symbol} için pozisyon yönetimi kontrolü başlatılıyor...")
-            else:
-                if self._debug_enabled:
-                    print(f"↔️ {symbol} sinyal değişikliği yok: {signal}")
-            
-            self.status["last_signals"][symbol] = signal
-            
-            # 🎯 POZİSYON YÖNETİM MANTITI
-            if self._debug_enabled:
-                print(f"🔄 {symbol} için Bollinger pozisyon mantığı kontrol ediliyor...")
-            await self._handle_multi_coin_position_logic(symbol, signal)
+                    self._record_signal(symbol)
+                    print(f"🚨 {symbol} YENİ BOLLINGER: {previous_signal} -> {signal}")
+                    
+                self.status["last_signals"][symbol] = signal
+                
+                # Pozisyon mantığı
+                await self._handle_multi_coin_position_logic(symbol, signal)
                 
         except Exception as e:
-            print(f"❌ {symbol} Bollinger WebSocket mesaj işlenirken HATA: {e}")
-            if self._debug_enabled:
-                print(f"🔍 HATA DETAYI:\n{traceback.format_exc()}")
+            print(f"❌ {symbol} WebSocket hatası: {e}")
+
+    def _can_generate_signal(self, symbol: str) -> bool:
+        """Signal throttling kontrolü"""
+        if not getattr(settings, 'SIGNAL_THROTTLE', True):
+            return True
+            
+        current_time = time.time()
+        max_signals = getattr(settings, 'MAX_SIGNALS_PER_MINUTE', 3)
+        
+        # Bu symbol için son 1 dakikadaki sinyal sayısını kontrol et
+        if symbol not in self._signal_count_per_minute:
+            self._signal_count_per_minute[symbol] = []
+        
+        # 1 dakikadan eski sinyalleri temizle
+        minute_ago = current_time - 60
+        self._signal_count_per_minute[symbol] = [
+            t for t in self._signal_count_per_minute[symbol] 
+            if t > minute_ago
+        ]
+        
+        return len(self._signal_count_per_minute[symbol]) < max_signals
+    
+    def _record_signal(self, symbol: str):
+        """Sinyal kaydı"""
+        current_time = time.time()
+        if symbol not in self._signal_count_per_minute:
+            self._signal_count_per_minute[symbol] = []
+        self._signal_count_per_minute[symbol].append(current_time)
 
     async def _handle_multi_coin_position_logic(self, signal_symbol: str, signal: str):
         """Multi-coin pozisyon yönetim mantığı - Bollinger Bands optimize"""
@@ -423,11 +445,6 @@ class BotCore:
             # Mevcut durum kontrolü
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
-            
-            if self._debug_enabled:
-                print(f"🔍 Bollinger pozisyon mantığı: {signal_symbol} -> {signal}")
-                print(f"    Mevcut aktif: {current_active_symbol}")
-                print(f"    Mevcut pozisyon: {current_position_side}")
             
             # DURUM 1: Hiç pozisyon yok, yeni Bollinger sinyali geldi
             if not current_active_symbol and not current_position_side and signal != "HOLD":
@@ -449,7 +466,7 @@ class BotCore:
                 current_active_symbol != signal_symbol and 
                 current_position_side and 
                 signal != "HOLD"):
-                print(f"💡 Yeni Bollinger coin fırsatı: {signal_symbol} -> {signal} (Mevcut: {current_active_symbol})")
+                print(f"💡 Yeni Bollinger coin fırsatı: {signal_symbol} -> {signal}")
                 await self._switch_to_new_coin(current_active_symbol, signal_symbol, signal)
                 return
             
@@ -480,83 +497,63 @@ class BotCore:
                     self.status["active_symbol"] = None
                     self.status["position_side"] = None
                     
-                    # Pozisyon kapandıktan sonra yetim emir temizliği
-                    print(f"🧹 {current_active_symbol} pozisyon kapandı - yetim emir temizliği...")
-                    await binance_client.cancel_all_orders_safe(current_active_symbol)
+                    # Cache'i güncelle
+                    self._cached_order_size = 0.0  # Yeni hesaplama için
                     
-                    # Yeni bakiye ile order size güncelle
-                    await self._calculate_dynamic_order_size()
-                    
-                    # Eğer bu mesajı gönderen symbol'de aktif Bollinger sinyali varsa hemen pozisyon aç
+                    # Eğer bu mesajı gönderen symbol'de aktif Bollinger sinyali varsa pozisyon aç
                     if signal != "HOLD":
-                        print(f"🚀 Pozisyon kapandıktan sonra hemen yeni Bollinger fırsatı: {signal_symbol} -> {signal}")
+                        print(f"🚀 Pozisyon kapandıktan sonra yeni Bollinger fırsatı: {signal_symbol} -> {signal}")
                         await self._open_new_position(signal_symbol, signal)
                         
         except Exception as e:
             print(f"❌ Bollinger multi-coin pozisyon mantığı hatası: {e}")
-            if self._debug_enabled:
-                print(f"🔍 Detay: {traceback.format_exc()}")
 
     async def _open_new_position(self, symbol: str, signal: str):
-        """BOLLINGER BANDS: Yeni pozisyon açma - Gelişmiş Debug"""
+        """✅ OPTIMIZE: Yeni pozisyon açma - Performance optimized"""
         try:
-            print(f"=" * 70)
-            print(f"🎯 {symbol} İÇİN YENİ BOLLINGER BANDS {signal} POZİSYONU AÇILIYOR...")
-            print(f"=" * 70)
+            print(f"🎯 {symbol} -> {signal} Bollinger pozisyonu açılıyor...")
             
             # Test modu kontrolü
             if hasattr(settings, 'TEST_MODE') and settings.TEST_MODE:
-                print(f"🧪 TEST MODU: {symbol} {signal} Bollinger pozisyonu simüle edildi")
+                print(f"🧪 TEST: {symbol} {signal} Bollinger simüle edildi")
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
                 self.status["status_message"] = f"TEST BOLLINGER: {signal} @ {symbol}"
                 return True
             
-            # Yetim emir temizliği
-            print(f"🧹 ADIM 1: {symbol} pozisyon öncesi yetim emir temizliği...")
-            await binance_client.cancel_all_orders_safe(symbol)
-            await asyncio.sleep(0.3)
+            # Rate limit delay
+            if hasattr(settings, 'API_CALL_DELAY'):
+                await asyncio.sleep(settings.API_CALL_DELAY)
             
-            # Dinamik order size hesapla
-            print(f"💰 ADIM 2: Bollinger Bands dinamik pozisyon boyutu hesaplanıyor...")
+            # Yetim emir temizliği
+            await binance_client.cancel_all_orders_safe(symbol)
+            await asyncio.sleep(0.2)
+            
+            # Dinamik order size - cache kullan
             dynamic_order_size = await self._calculate_dynamic_order_size()
             
-            if dynamic_order_size < 10.0:
-                print(f"❌ {symbol} için hesaplanan pozisyon boyutu çok düşük: {dynamic_order_size}")
+            if dynamic_order_size < 15.0:
+                print(f"❌ {symbol} pozisyon boyutu çok düşük: {dynamic_order_size}")
                 return False
             
             # Fiyat al
-            print(f"💱 ADIM 3: {symbol} market fiyatı alınıyor...")
             price = await binance_client.get_market_price(symbol)
             if not price:
-                print(f"❌ {symbol} için fiyat alınamadı.")
+                print(f"❌ {symbol} fiyat alınamadı")
                 return False
                 
-            print(f"📊 BOLLINGER BANDS POZİSYON DETAYLARI:")
-            print(f"   🎯 Strateji: BOLLINGER BANDS")
-            print(f"   📈 BB Parameters: Period={settings.BOLLINGER_PERIOD}, StdDev={settings.BOLLINGER_STD_DEV}")
-            print(f"   🔄 Sinyal: {signal}")
-            print(f"   💰 Fiyat: {price}")
-            print(f"   💵 Tutar: {dynamic_order_size} USDT")
-            print(f"   ⚡ Kaldıraç: {settings.LEVERAGE}x")
-            print(f"   🛑 Stop Loss: %{settings.STOP_LOSS_PERCENT*100:.1f}")
-            print(f"   🎯 Take Profit: %{settings.TAKE_PROFIT_PERCENT*100:.1f}")
-            
-            # Miktar hesapla
+            # Pozisyon detayları
             side = "BUY" if signal == "LONG" else "SELL"
             quantity = self._format_quantity(symbol, (dynamic_order_size * settings.LEVERAGE) / price)
             
             if quantity <= 0:
-                print(f"❌ {symbol} için hesaplanan miktar çok düşük: {quantity}")
+                print(f"❌ {symbol} miktar çok düşük: {quantity}")
                 return False
 
-            print(f"   📊 Miktar: {quantity}")
-            print(f"   ↗️ Yön: {side}")
-            print(f"   💪 Toplam Pozisyon Değeri: {quantity * price:.2f} USDT")
+            print(f"📊 {symbol} Bollinger Pozisyon: {side} {quantity} @ {price:.6f}")
+            print(f"💰 Tutar: {dynamic_order_size:.2f} USDT ({settings.LEVERAGE}x kaldıraç)")
             
-            print(f"🎯 ADIM 4: {symbol} Bollinger piyasa emri + TP/SL koruması...")
-            
-            # Pozisyon aç (TP/SL ile birlikte)
+            # Pozisyon aç
             order = await binance_client.create_market_order_with_sl_tp(
                 symbol, side, quantity, price, self.price_precision.get(symbol, 2)
             )
@@ -564,38 +561,28 @@ class BotCore:
             if order:
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"🎯 BOLLINGER {signal}: {symbol} @ {price:.6f} ({dynamic_order_size:.2f} USDT) [SL:%{settings.STOP_LOSS_PERCENT*100:.1f} TP:%{settings.TAKE_PROFIT_PERCENT*100:.1f}] 🛡️"
+                self.status["status_message"] = f"🎯 BOLLINGER {signal}: {symbol} @ {price:.6f} ({dynamic_order_size:.2f} USDT) 🛡️"
                 
-                print(f"✅ BOLLINGER BANDS POZİSYON AÇILDI!")
-                print(f"🎉 {symbol} {signal} pozisyonu başarıyla oluşturuldu!")
-                print(f"💼 Yeni durum: {self.status['status_message']}")
-                print(f"🔄 Risk/Reward Oranı: 1:{settings.TAKE_PROFIT_PERCENT/settings.STOP_LOSS_PERCENT:.1f}")
-                print(f"=" * 70)
+                print(f"✅ {symbol} {signal} Bollinger pozisyonu açıldı!")
                 
                 # Cache temizle
                 try:
                     if hasattr(binance_client, '_cached_positions'):
                         binance_client._cached_positions.clear()
-                    if hasattr(binance_client, '_last_position_check'):
-                        binance_client._last_position_check.clear()
-                except Exception as cache_error:
-                    print(f"⚠️ Cache temizleme hatası: {cache_error}")
+                except:
+                    pass
                     
                 # Position manager'a bildir
-                await asyncio.sleep(2)
-                print(f"🛡️ {symbol} Bollinger pozisyonu otomatik TP/SL sisteme bildiriliyor...")
+                await asyncio.sleep(1)
                 await position_manager.manual_scan_symbol(symbol)
                 return True
             else:
-                print(f"❌ {symbol} Bollinger pozisyonu açılamadı.")
-                print(f"🧹 Acil yetim emir temizliği yapılıyor...")
+                print(f"❌ {symbol} Bollinger pozisyonu açılamadı")
                 await binance_client.force_cleanup_orders(symbol)
                 return False
                 
         except Exception as e:
-            print(f"❌ {symbol} Bollinger yeni pozisyon açma BEKLENMEYEN HATA: {e}")
-            if self._debug_enabled:
-                print(f"🔍 HATA DETAYI:\n{traceback.format_exc()}")
+            print(f"❌ {symbol} Bollinger pozisyon açma hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(symbol)
             except:
@@ -608,7 +595,6 @@ class BotCore:
             print(f"🔄 BOLLINGER POZISYON ÇEVİRME: {symbol} -> {new_signal}")
             
             # Pozisyon değişiminden önce yetim emir kontrolü
-            print(f"🧹 {symbol} pozisyon değişimi öncesi yetim emir temizliği...")
             await binance_client.cancel_all_orders_safe(symbol)
             await asyncio.sleep(0.2)
             
@@ -618,7 +604,6 @@ class BotCore:
                 position = open_positions[0]
                 position_amt = float(position['positionAmt'])
                 side_to_close = 'SELL' if position_amt > 0 else 'BUY'
-                print(f"📉 Bollinger ters sinyal - Mevcut {self.status['position_side']} pozisyonu kapatılıyor...")
                 
                 pnl = await binance_client.get_last_trade_pnl(symbol)
                 firebase_manager.log_trade({
@@ -632,7 +617,7 @@ class BotCore:
                 # Pozisyonu kapat
                 close_result = await binance_client.close_position(symbol, position_amt, side_to_close)
                 if not close_result:
-                    print("❌ Pozisyon kapatma başarısız - yeni Bollinger pozisyonu açılmayacak")
+                    print("❌ Pozisyon kapatma başarısız")
                     return
                     
                 await asyncio.sleep(1)
@@ -644,11 +629,11 @@ class BotCore:
                 self.status["position_side"] = None
                 
         except Exception as e:
-            print(f"❌ {symbol} Bollinger pozisyon değiştirme hatası: {e}")
+            print(f"❌ {symbol} Bollinger pozisyon çevirme hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(symbol)
-            except Exception as cleanup_error:
-                print(f"⚠️ Acil temizlik de başarısız: {cleanup_error}")
+            except:
+                pass
             self.status["active_symbol"] = None
             self.status["position_side"] = None
 
@@ -664,8 +649,6 @@ class BotCore:
                 position_amt = float(position['positionAmt'])
                 side_to_close = 'SELL' if position_amt > 0 else 'BUY'
                 
-                print(f"📉 {current_symbol} pozisyonu kapatılıyor (Bollinger coin değişimi)...")
-                
                 pnl = await binance_client.get_last_trade_pnl(current_symbol)
                 firebase_manager.log_trade({
                     "symbol": current_symbol, 
@@ -678,7 +661,7 @@ class BotCore:
                 # Mevcut pozisyonu kapat
                 close_result = await binance_client.close_position(current_symbol, position_amt, side_to_close)
                 if not close_result:
-                    print(f"❌ {current_symbol} pozisyon kapatma başarısız - Bollinger coin değişimi iptal")
+                    print(f"❌ {current_symbol} pozisyon kapatma başarısız")
                     return
                     
                 await asyncio.sleep(1)
@@ -686,7 +669,6 @@ class BotCore:
             # Yeni coin'de Bollinger pozisyonu aç
             success = await self._open_new_position(new_symbol, new_signal)
             if not success:
-                print(f"❌ {new_symbol} yeni Bollinger pozisyonu açılamadı")
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
                 
@@ -695,35 +677,42 @@ class BotCore:
             try:
                 await binance_client.force_cleanup_orders(current_symbol)
                 await binance_client.force_cleanup_orders(new_symbol)
-            except Exception as cleanup_error:
-                print(f"⚠️ Bollinger coin değişimi acil temizlik hatası: {cleanup_error}")
+            except:
+                pass
             self.status["active_symbol"] = None
             self.status["position_side"] = None
 
     async def _update_status_info(self):
-        """Durum bilgilerini günceller - Bollinger Bands optimize"""
+        """✅ OPTIMIZE: Durum bilgilerini günceller - Performance optimized"""
         try:
-            if self.status["is_running"]:
-                # Cache kullanarak sorgu sayısını azalt
-                self.status["account_balance"] = await binance_client.get_account_balance(use_cache=True)
-                if self.status["active_symbol"] and self.status["position_side"]:
-                    self.status["position_pnl"] = await binance_client.get_position_pnl(
-                        self.status["active_symbol"], use_cache=True
-                    )
-                else:
-                    self.status["position_pnl"] = 0.0
-                # Order size'ı dinamik tut
+            if not self.status["is_running"]:
+                return
+                
+            # Bakiye güncellemesi - cache kullan
+            self.status["account_balance"] = await binance_client.get_account_balance(use_cache=True)
+            
+            # Aktif pozisyon PnL kontrolü
+            if self.status["active_symbol"] and self.status["position_side"]:
+                self.status["position_pnl"] = await binance_client.get_position_pnl(
+                    self.status["active_symbol"], use_cache=True
+                )
+            else:
+                self.status["position_pnl"] = 0.0
+            
+            # Order size sadece gerektiğinde güncelle
+            current_time = time.time()
+            if self._cached_order_size == 0 or current_time - self._last_balance_calculation > self._balance_calculation_interval:
                 await self._calculate_dynamic_order_size()
-                
-                # Position monitor durumunu güncelle
-                monitor_status = position_manager.get_status()
-                self.status["position_monitor_active"] = monitor_status["is_running"]
-                
+            
+            # Position monitor durumu
+            monitor_status = position_manager.get_status()
+            self.status["position_monitor_active"] = monitor_status["is_running"]
+            
         except Exception as e:
-            print(f"❌ Bollinger durum güncelleme hatası: {e}")
+            print(f"❌ Status güncelleme hatası: {e}")
 
     async def stop(self):
-        """Bollinger Bands bot durdurma"""
+        """Bollinger Bands bot durdurma - Performance optimized"""
         self._stop_requested = True
         if self.status["is_running"]:
             print("🛑 Bollinger Bands multi-coin bot durduruluyor...")
@@ -743,19 +732,8 @@ class BotCore:
             
             # Position monitoring'i durdur
             if self.status.get("position_monitor_active"):
-                print("🛡️ Otomatik TP/SL monitoring durduruluyor...")
                 await position_manager.stop_monitoring()
                 self.status["position_monitor_active"] = False
-            
-            # Bot durdururken son temizlik
-            if self.status.get("symbols"):
-                print(f"🧹 Bollinger bot durduruluyor - tüm symboller için son yetim emir temizliği...")
-                for symbol in self.status["symbols"]:
-                    try:
-                        await binance_client.cancel_all_orders_safe(symbol)
-                        await asyncio.sleep(0.1)
-                    except Exception as final_cleanup_error:
-                        print(f"⚠️ {symbol} son temizlik hatası: {final_cleanup_error}")
             
             # Final statistics
             total_signals = self.status["bollinger_signals_count"]
@@ -813,7 +791,7 @@ class BotCore:
             self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
             
             # Bollinger Bands için geçmiş veri çekme
-            required_candles = max(settings.BOLLINGER_PERIOD + 20, 60)
+            required_candles = max(settings.BOLLINGER_PERIOD + 20, 50)
             klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=required_candles)
             if not klines or len(klines) < required_candles - 10:
                 return {"success": False, "message": f"{symbol} için yetersiz Bollinger Bands verisi"}
@@ -846,7 +824,7 @@ class BotCore:
             return {"success": False, "message": f"{symbol} zaten izlenmiyor"}
             
         if self.status["active_symbol"] == symbol:
-            return {"success": False, "message": f"{symbol} şu anda aktif Bollinger pozisyonunda - önce pozisyonu kapatın"}
+            return {"success": False, "message": f"{symbol} şu anda aktif Bollinger pozisyonunda"}
             
         try:
             # Symbol'ü listeden çıkar
@@ -875,7 +853,7 @@ class BotCore:
             return {"success": False, "message": f"{symbol} çıkarılırken hata: {e}"}
 
     def get_multi_status(self):
-        """🎯 Bollinger Bands multi-coin bot durumunu döndür"""
+        """🎯 Bollinger Bands multi-coin bot durumunu döndür - Performance optimized"""
         win_rate = 0
         total_trades = self.status["successful_trades"] + self.status["failed_trades"]
         if total_trades > 0:
@@ -910,6 +888,11 @@ class BotCore:
                 "leverage": settings.LEVERAGE,
                 "stop_loss": f"{settings.STOP_LOSS_PERCENT*100:.1f}%",
                 "take_profit": f"{settings.TAKE_PROFIT_PERCENT*100:.1f}%"
+            },
+            "performance": {
+                "cache_hit_rate": f"{((time.time() - self._last_balance_calculation) / self._balance_calculation_interval * 100):.1f}%",
+                "cached_order_size": self._cached_order_size,
+                "calculation_in_progress": self._calculation_in_progress
             }
         }
 
@@ -920,7 +903,6 @@ class BotCore:
             return {"success": False, "message": "Bollinger bot çalışmıyor"}
             
         try:
-            print("🔍 Manuel pozisyon taraması başlatılıyor...")
             await position_manager._scan_and_protect_positions()
             return {
                 "success": True, 
@@ -933,7 +915,6 @@ class BotCore:
     async def scan_specific_symbol(self, symbol: str):
         """Belirli bir coin için manuel TP/SL kontrolü"""
         try:
-            print(f"🎯 {symbol} için manuel TP/SL kontrolü...")
             success = await position_manager.manual_scan_symbol(symbol)
             return {
                 "success": success,
