@@ -19,7 +19,7 @@ class BotCore:
             "symbols": [],  # Multi-coin support
             "active_symbol": None,  # Şu anda pozisyonu olan symbol
             "position_side": None, 
-            "status_message": "Bollinger Bands Bot başlatılmadı.",
+            "status_message": "EMA Cross Scalping Bot başlatılmadı.",
             "account_balance": 0.0,
             "position_pnl": 0.0,
             "order_size": 0.0,
@@ -28,7 +28,7 @@ class BotCore:
             "last_signals": {},  # Her coin için son sinyal
             "signal_filters_active": True,
             "filtered_signals_count": 0,
-            "bollinger_signals_count": 0,  # Bollinger sinyalleri için
+            "ema_cross_signals_count": 0,  # EMA Cross sinyalleri için
             "successful_trades": 0,
             "failed_trades": 0
         }
@@ -51,8 +51,8 @@ class BotCore:
         self._last_signal_time = {}  # Signal throttling için
         self._signal_count_per_minute = {}  # Dakikada sinyal sayısı
         
-        print("🚀 PERFORMANCE OPTIMIZED Bollinger Bands Bot v3.2 başlatıldı")
-        print(f"📊 Strateji: BB Period={settings.BOLLINGER_PERIOD}, StdDev={settings.BOLLINGER_STD_DEV}")
+        print("🚀 PERFORMANCE OPTIMIZED EMA Cross Scalping Bot v3.2 başlatıldı")
+        print(f"📊 Strateji: EMA {settings.EMA_FAST_PERIOD}/{settings.EMA_SLOW_PERIOD}/{settings.EMA_TREND_PERIOD} + RSI + Volume")
         print(f"💰 Risk/Reward: SL=%{settings.STOP_LOSS_PERCENT*100:.1f} / TP=%{settings.TAKE_PROFIT_PERCENT*100:.1f}")
         print(f"⚡ Performance: Cache={self._balance_calculation_interval}s, Rate Limit Protected")
 
@@ -112,9 +112,9 @@ class BotCore:
                 self._calculation_in_progress = False
 
     async def start(self, symbols: list):
-        """Multi-coin Bollinger Bands bot başlatma - Performance Optimized"""
+        """Multi-coin EMA Cross Scalping bot başlatma - Performance Optimized"""
         if self.status["is_running"]:
-            print("⚠️ Bollinger Bands bot zaten çalışıyor.")
+            print("⚠️ EMA Cross Scalping bot zaten çalışıyor.")
             return
             
         if not symbols or len(symbols) == 0:
@@ -127,15 +127,15 @@ class BotCore:
             "symbols": symbols,
             "active_symbol": None,
             "position_side": None, 
-            "status_message": f"🎯 Bollinger Bands: {len(symbols)} coin için başlatılıyor...",
+            "status_message": f"🎯 EMA Cross Scalping: {len(symbols)} coin için başlatılıyor...",
             "dynamic_sizing": True,
             "position_monitor_active": False,
             "last_signals": {symbol: "HOLD" for symbol in symbols},
             "signal_filters_active": True,
             "filtered_signals_count": 0,
-            "bollinger_signals_count": 0
+            "ema_cross_signals_count": 0
         })
-        print(f"🚀 BOLLINGER BANDS Multi-coin bot başlatılıyor: {', '.join(symbols)}")
+        print(f"🚀 EMA CROSS SCALPING Multi-coin bot başlatılıyor: {', '.join(symbols)}")
         
         try:
             # 1. Binance bağlantısı
@@ -162,14 +162,14 @@ class BotCore:
                 self.status["account_balance"] = await binance_client.get_account_balance(use_cache=False)
                 initial_order_size = await self._calculate_dynamic_order_size()
                 print(f"✅ Hesap bakiyesi: {self.status['account_balance']:.2f} USDT")
-                print(f"✅ Bollinger Bands pozisyon boyutu: {initial_order_size:.2f} USDT")
+                print(f"✅ EMA Cross Scalping pozisyon boyutu: {initial_order_size:.2f} USDT")
                 print(f"✅ Kaldıraçlı işlem gücü: {initial_order_size * settings.LEVERAGE:.2f} USDT")
             except Exception as balance_error:
                 print(f"❌ Bakiye kontrol hatası: {balance_error}")
                 raise balance_error
             
-            # 4. Tüm symboller için bilgi alma ve Bollinger Bands hazırlık
-            print(f"4️⃣ {len(symbols)} symbol için Bollinger Bands analizi hazırlığı...")
+            # 4. Tüm symboller için bilgi alma ve EMA Cross Scalping hazırlık
+            print(f"4️⃣ {len(symbols)} symbol için EMA Cross Scalping analizi hazırlığı...")
             for symbol in symbols:
                 try:
                     symbol_info = await binance_client.get_symbol_info(symbol)
@@ -181,14 +181,14 @@ class BotCore:
                     self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
                     self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
                     
-                    # Bollinger Bands için geçmiş veri çek
-                    required_candles = max(settings.BOLLINGER_PERIOD + 20, 50)
+                    # EMA Cross Scalping için geçmiş veri çek
+                    required_candles = max(settings.EMA_TREND_PERIOD + 20, 70)  # EMA50 için 70 mum
                     klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=required_candles)
                     if klines and len(klines) >= required_candles - 10:
                         self.multi_klines[symbol] = klines
                         print(f"✅ {symbol} hazır ({len(klines)} mum)")
                         
-                        # İlk Bollinger Bands analizi test et
+                        # İlk EMA Cross analizi test et
                         test_signal = trading_strategy.analyze_klines(klines, symbol)
                     else:
                         print(f"❌ {symbol} yetersiz veri. Atlanıyor...")
@@ -248,30 +248,30 @@ class BotCore:
                 print(f"⚠️ Position monitoring başlatılamadı: {monitor_error}")
                 
             # 8. Multi-WebSocket bağlantıları başlat
-            print("8️⃣ 🌐 Bollinger Bands Multi-coin WebSocket kuruluyor...")
+            print("8️⃣ 🌐 EMA Cross Scalping Multi-coin WebSocket kuruluyor...")
             valid_symbols = [s for s in symbols if s in self.multi_klines]
             self.status["symbols"] = valid_symbols
             
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
                 
-            self.status["status_message"] = f"🎯 BOLLINGER BANDS: {len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [⚡ PERFORMANCE OPTIMIZED + ULTRA ESNEK FİLTRELER + OTOMATIK TP/SL]"
+            self.status["status_message"] = f"🎯 EMA CROSS SCALPING: {len(valid_symbols)} coin izleniyor ({settings.TIMEFRAME}) [⚡ PERFORMANCE OPTIMIZED + TRIPLE CONFIRMATION + OTOMATIK TP/SL]"
             print(f"✅ {self.status['status_message']}")
             
             await self._start_multi_websocket_loop(valid_symbols)
                         
         except Exception as e:
-            error_msg = f"❌ Bollinger Bands bot başlatılırken beklenmeyen hata: {e}"
+            error_msg = f"❌ EMA Cross Scalping bot başlatılırken beklenmeyen hata: {e}"
             print(error_msg)
             print(f"❌ Full traceback: {traceback.format_exc()}")
             self.status["status_message"] = error_msg
         
-        print("🛑 Bollinger Bands bot durduruluyor...")
+        print("🛑 EMA Cross Scalping bot durduruluyor...")
         await self.stop()
 
     async def _start_multi_websocket_loop(self, symbols: list):
         """Multi-coin WebSocket bağlantı döngüsü"""
-        print(f"🌐 {len(symbols)} symbol için Bollinger Bands WebSocket başlatılıyor...")
+        print(f"🌐 {len(symbols)} symbol için EMA Cross Scalping WebSocket başlatılıyor...")
         
         # Her symbol için ayrı WebSocket task oluştur
         self._websocket_tasks = []
@@ -290,7 +290,7 @@ class BotCore:
         ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
         reconnect_attempts = 0
         
-        print(f"🔗 {symbol} Bollinger WebSocket başlatılıyor...")
+        print(f"🔗 {symbol} EMA Cross WebSocket başlatılıyor...")
         
         while not self._stop_requested and reconnect_attempts < self._max_reconnect_attempts:
             try:
@@ -300,7 +300,7 @@ class BotCore:
                     ping_timeout=settings.WEBSOCKET_PING_TIMEOUT,
                     close_timeout=settings.WEBSOCKET_CLOSE_TIMEOUT
                 ) as ws:
-                    print(f"✅ {symbol} Bollinger WebSocket bağlandı")
+                    print(f"✅ {symbol} EMA Cross WebSocket bağlandı")
                     reconnect_attempts = 0
                     self._websocket_connections[symbol] = ws
                     
@@ -378,7 +378,7 @@ class BotCore:
             self.multi_klines[symbol].append(new_kline)
             
             # Minimum veri kontrolü
-            min_required = max(settings.BOLLINGER_PERIOD + 10, 35)
+            min_required = max(settings.EMA_TREND_PERIOD + 10, 60)  # EMA50 için 60 mum
             if len(self.multi_klines[symbol]) < min_required:
                 return
             
@@ -386,7 +386,7 @@ class BotCore:
             if not self._can_generate_signal(symbol):
                 return
             
-            # Bollinger Bands analizi
+            # EMA Cross Scalping analizi
             signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
             
             # Önceki sinyal ile karşılaştır
@@ -399,9 +399,9 @@ class BotCore:
                     if self._debug_enabled:
                         print(f"🛡️ {symbol} filtrelendi - toplam: {self.status['filtered_signals_count']}")
                 else:
-                    self.status["bollinger_signals_count"] += 1
+                    self.status["ema_cross_signals_count"] += 1
                     self._record_signal(symbol)
-                    print(f"🚨 {symbol} YENİ BOLLINGER: {previous_signal} -> {signal}")
+                    print(f"🚨 {symbol} YENİ EMA CROSS: {previous_signal} -> {signal}")
                     
                 self.status["last_signals"][symbol] = signal
                 
@@ -417,7 +417,7 @@ class BotCore:
             return True
             
         current_time = time.time()
-        max_signals = getattr(settings, 'MAX_SIGNALS_PER_MINUTE', 3)
+        max_signals = getattr(settings, 'MAX_SIGNALS_PER_MINUTE', 6)
         
         # Bu symbol için son 1 dakikadaki sinyal sayısını kontrol et
         if symbol not in self._signal_count_per_minute:
@@ -440,33 +440,33 @@ class BotCore:
         self._signal_count_per_minute[symbol].append(current_time)
 
     async def _handle_multi_coin_position_logic(self, signal_symbol: str, signal: str):
-        """Multi-coin pozisyon yönetim mantığı - Bollinger Bands optimize"""
+        """Multi-coin pozisyon yönetim mantığı - EMA Cross Scalping optimize"""
         try:
             # Mevcut durum kontrolü
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
             
-            # DURUM 1: Hiç pozisyon yok, yeni Bollinger sinyali geldi
+            # DURUM 1: Hiç pozisyon yok, yeni EMA Cross sinyali geldi
             if not current_active_symbol and not current_position_side and signal != "HOLD":
-                print(f"🚀 Yeni Bollinger fırsatı: {signal_symbol} -> {signal}")
+                print(f"🚀 Yeni EMA Cross fırsatı: {signal_symbol} -> {signal}")
                 await self._open_new_position(signal_symbol, signal)
                 return
             
-            # DURUM 2: Mevcut pozisyon var, aynı symbol'den ters Bollinger sinyali geldi
+            # DURUM 2: Mevcut pozisyon var, aynı symbol'den ters EMA Cross sinyali geldi
             if (current_active_symbol == signal_symbol and 
                 current_position_side and 
                 signal != "HOLD" and 
                 signal != current_position_side):
-                print(f"🔄 {signal_symbol} Bollinger ters sinyali: {current_position_side} -> {signal}")
+                print(f"🔄 {signal_symbol} EMA Cross ters sinyali: {current_position_side} -> {signal}")
                 await self._flip_position(signal_symbol, signal)
                 return
             
-            # DURUM 3: Mevcut pozisyon var, başka symbol'den Bollinger sinyali geldi
+            # DURUM 3: Mevcut pozisyon var, başka symbol'den EMA Cross sinyali geldi
             if (current_active_symbol and 
                 current_active_symbol != signal_symbol and 
                 current_position_side and 
                 signal != "HOLD"):
-                print(f"💡 Yeni Bollinger coin fırsatı: {signal_symbol} -> {signal}")
+                print(f"💡 Yeni EMA Cross coin fırsatı: {signal_symbol} -> {signal}")
                 await self._switch_to_new_coin(current_active_symbol, signal_symbol, signal)
                 return
             
@@ -487,7 +487,7 @@ class BotCore:
                     
                     firebase_manager.log_trade({
                         "symbol": current_active_symbol, 
-                        "strategy": "bollinger_bands",
+                        "strategy": "ema_cross_scalping",
                         "pnl": pnl, 
                         "status": "CLOSED_BY_SL_TP", 
                         "timestamp": datetime.now(timezone.utc)
@@ -500,25 +500,25 @@ class BotCore:
                     # Cache'i güncelle
                     self._cached_order_size = 0.0  # Yeni hesaplama için
                     
-                    # Eğer bu mesajı gönderen symbol'de aktif Bollinger sinyali varsa pozisyon aç
+                    # Eğer bu mesajı gönderen symbol'de aktif EMA Cross sinyali varsa pozisyon aç
                     if signal != "HOLD":
-                        print(f"🚀 Pozisyon kapandıktan sonra yeni Bollinger fırsatı: {signal_symbol} -> {signal}")
+                        print(f"🚀 Pozisyon kapandıktan sonra yeni EMA Cross fırsatı: {signal_symbol} -> {signal}")
                         await self._open_new_position(signal_symbol, signal)
                         
         except Exception as e:
-            print(f"❌ Bollinger multi-coin pozisyon mantığı hatası: {e}")
+            print(f"❌ EMA Cross multi-coin pozisyon mantığı hatası: {e}")
 
     async def _open_new_position(self, symbol: str, signal: str):
         """✅ OPTIMIZE: Yeni pozisyon açma - Performance optimized"""
         try:
-            print(f"🎯 {symbol} -> {signal} Bollinger pozisyonu açılıyor...")
+            print(f"🎯 {symbol} -> {signal} EMA Cross pozisyonu açılıyor...")
             
             # Test modu kontrolü
             if hasattr(settings, 'TEST_MODE') and settings.TEST_MODE:
-                print(f"🧪 TEST: {symbol} {signal} Bollinger simüle edildi")
+                print(f"🧪 TEST: {symbol} {signal} EMA Cross simüle edildi")
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"TEST BOLLINGER: {signal} @ {symbol}"
+                self.status["status_message"] = f"TEST EMA CROSS: {signal} @ {symbol}"
                 return True
             
             # Rate limit delay
@@ -550,7 +550,7 @@ class BotCore:
                 print(f"❌ {symbol} miktar çok düşük: {quantity}")
                 return False
 
-            print(f"📊 {symbol} Bollinger Pozisyon: {side} {quantity} @ {price:.6f}")
+            print(f"📊 {symbol} EMA Cross Pozisyon: {side} {quantity} @ {price:.6f}")
             print(f"💰 Tutar: {dynamic_order_size:.2f} USDT ({settings.LEVERAGE}x kaldıraç)")
             
             # Pozisyon aç
@@ -561,9 +561,9 @@ class BotCore:
             if order:
                 self.status["active_symbol"] = symbol
                 self.status["position_side"] = signal
-                self.status["status_message"] = f"🎯 BOLLINGER {signal}: {symbol} @ {price:.6f} ({dynamic_order_size:.2f} USDT) 🛡️"
+                self.status["status_message"] = f"🎯 EMA CROSS {signal}: {symbol} @ {price:.6f} ({dynamic_order_size:.2f} USDT) 🛡️"
                 
-                print(f"✅ {symbol} {signal} Bollinger pozisyonu açıldı!")
+                print(f"✅ {symbol} {signal} EMA Cross pozisyonu açıldı!")
                 
                 # Cache temizle
                 try:
@@ -577,12 +577,12 @@ class BotCore:
                 await position_manager.manual_scan_symbol(symbol)
                 return True
             else:
-                print(f"❌ {symbol} Bollinger pozisyonu açılamadı")
+                print(f"❌ {symbol} EMA Cross pozisyonu açılamadı")
                 await binance_client.force_cleanup_orders(symbol)
                 return False
                 
         except Exception as e:
-            print(f"❌ {symbol} Bollinger pozisyon açma hatası: {e}")
+            print(f"❌ {symbol} EMA Cross pozisyon açma hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(symbol)
             except:
@@ -590,9 +590,9 @@ class BotCore:
             return False
 
     async def _flip_position(self, symbol: str, new_signal: str):
-        """Aynı coin'de Bollinger pozisyon çevirme"""
+        """Aynı coin'de EMA Cross pozisyon çevirme"""
         try:
-            print(f"🔄 BOLLINGER POZISYON ÇEVİRME: {symbol} -> {new_signal}")
+            print(f"🔄 EMA CROSS POZİSYON ÇEVİRME: {symbol} -> {new_signal}")
             
             # Pozisyon değişiminden önce yetim emir kontrolü
             await binance_client.cancel_all_orders_safe(symbol)
@@ -608,9 +608,9 @@ class BotCore:
                 pnl = await binance_client.get_last_trade_pnl(symbol)
                 firebase_manager.log_trade({
                     "symbol": symbol,
-                    "strategy": "bollinger_bands", 
+                    "strategy": "ema_cross_scalping", 
                     "pnl": pnl, 
-                    "status": "CLOSED_BY_BOLLINGER_FLIP", 
+                    "status": "CLOSED_BY_EMA_CROSS_FLIP", 
                     "timestamp": datetime.now(timezone.utc)
                 })
 
@@ -622,14 +622,14 @@ class BotCore:
                     
                 await asyncio.sleep(1)
 
-            # Yeni Bollinger pozisyonu aç
+            # Yeni EMA Cross pozisyonu aç
             success = await self._open_new_position(symbol, new_signal)
             if not success:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
                 
         except Exception as e:
-            print(f"❌ {symbol} Bollinger pozisyon çevirme hatası: {e}")
+            print(f"❌ {symbol} EMA Cross pozisyon çevirme hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(symbol)
             except:
@@ -638,9 +638,9 @@ class BotCore:
             self.status["position_side"] = None
 
     async def _switch_to_new_coin(self, current_symbol: str, new_symbol: str, new_signal: str):
-        """Farklı coin'e Bollinger geçişi"""
+        """Farklı coin'e EMA Cross geçişi"""
         try:
-            print(f"🔄 BOLLINGER COİN DEĞİŞİMİ: {current_symbol} -> {new_symbol} ({new_signal})")
+            print(f"🔄 EMA CROSS COİN DEĞİŞİMİ: {current_symbol} -> {new_symbol} ({new_signal})")
             
             # Mevcut pozisyonu kapat
             open_positions = await binance_client.get_open_positions(current_symbol, use_cache=False)
@@ -652,9 +652,9 @@ class BotCore:
                 pnl = await binance_client.get_last_trade_pnl(current_symbol)
                 firebase_manager.log_trade({
                     "symbol": current_symbol, 
-                    "strategy": "bollinger_bands",
+                    "strategy": "ema_cross_scalping",
                     "pnl": pnl, 
-                    "status": "CLOSED_FOR_BOLLINGER_COIN_SWITCH", 
+                    "status": "CLOSED_FOR_EMA_CROSS_COIN_SWITCH", 
                     "timestamp": datetime.now(timezone.utc)
                 })
 
@@ -666,14 +666,14 @@ class BotCore:
                     
                 await asyncio.sleep(1)
 
-            # Yeni coin'de Bollinger pozisyonu aç
+            # Yeni coin'de EMA Cross pozisyonu aç
             success = await self._open_new_position(new_symbol, new_signal)
             if not success:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
                 
         except Exception as e:
-            print(f"❌ Bollinger coin değişimi hatası: {e}")
+            print(f"❌ EMA Cross coin değişimi hatası: {e}")
             try:
                 await binance_client.force_cleanup_orders(current_symbol)
                 await binance_client.force_cleanup_orders(new_symbol)
@@ -712,10 +712,10 @@ class BotCore:
             print(f"❌ Status güncelleme hatası: {e}")
 
     async def stop(self):
-        """Bollinger Bands bot durdurma - Performance optimized"""
+        """EMA Cross Scalping bot durdurma - Performance optimized"""
         self._stop_requested = True
         if self.status["is_running"]:
-            print("🛑 Bollinger Bands multi-coin bot durduruluyor...")
+            print("🛑 EMA Cross Scalping multi-coin bot durduruluyor...")
             
             # WebSocket task'larını iptal et
             for task in self._websocket_tasks:
@@ -736,12 +736,12 @@ class BotCore:
                 self.status["position_monitor_active"] = False
             
             # Final statistics
-            total_signals = self.status["bollinger_signals_count"]
+            total_signals = self.status["ema_cross_signals_count"]
             successful = self.status["successful_trades"]
             failed = self.status["failed_trades"]
             if total_signals > 0:
                 success_rate = (successful / (successful + failed) * 100) if (successful + failed) > 0 else 0
-                print(f"📊 BOLLINGER BANDS İSTATİSTİKLERİ:")
+                print(f"📊 EMA CROSS SCALPING İSTATİSTİKLERİ:")
                 print(f"   🎯 Toplam sinyal: {total_signals}")
                 print(f"   ✅ Başarılı: {successful}")
                 print(f"   ❌ Başarısız: {failed}")
@@ -751,7 +751,7 @@ class BotCore:
                 "is_running": False, 
                 "symbols": [],
                 "active_symbol": None,
-                "status_message": "Bollinger Bands bot durduruldu.",
+                "status_message": "EMA Cross Scalping bot durduruldu.",
                 "account_balance": 0.0,
                 "position_pnl": 0.0,
                 "order_size": 0.0,
@@ -759,7 +759,7 @@ class BotCore:
                 "last_signals": {},
                 "signal_filters_active": False,
                 "filtered_signals_count": 0,
-                "bollinger_signals_count": 0
+                "ema_cross_signals_count": 0
             })
             print(f"✅ {self.status['status_message']}")
             await binance_client.close()
@@ -775,7 +775,7 @@ class BotCore:
     async def add_symbol(self, symbol: str):
         """Çalışan bot'a yeni symbol ekle"""
         if not self.status["is_running"]:
-            return {"success": False, "message": "Bollinger bot çalışmıyor"}
+            return {"success": False, "message": "EMA Cross bot çalışmıyor"}
             
         if symbol in self.status["symbols"]:
             return {"success": False, "message": f"{symbol} zaten izleniyor"}
@@ -790,11 +790,11 @@ class BotCore:
             self.quantity_precision[symbol] = self._get_precision_from_filter(symbol_info, 'LOT_SIZE', 'stepSize')
             self.price_precision[symbol] = self._get_precision_from_filter(symbol_info, 'PRICE_FILTER', 'tickSize')
             
-            # Bollinger Bands için geçmiş veri çekme
-            required_candles = max(settings.BOLLINGER_PERIOD + 20, 50)
+            # EMA Cross Scalping için geçmiş veri çekme
+            required_candles = max(settings.EMA_TREND_PERIOD + 20, 70)  # EMA50 için 70 mum
             klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=required_candles)
             if not klines or len(klines) < required_candles - 10:
-                return {"success": False, "message": f"{symbol} için yetersiz Bollinger Bands verisi"}
+                return {"success": False, "message": f"{symbol} için yetersiz EMA Cross Scalping verisi"}
             
             self.multi_klines[symbol] = klines
             
@@ -809,8 +809,8 @@ class BotCore:
             task = asyncio.create_task(self._single_websocket_loop(symbol))
             self._websocket_tasks.append(task)
             
-            print(f"✅ {symbol} Bollinger bot'a eklendi")
-            return {"success": True, "message": f"{symbol} Bollinger Bands bot'a başarıyla eklendi"}
+            print(f"✅ {symbol} EMA Cross bot'a eklendi")
+            return {"success": True, "message": f"{symbol} EMA Cross Scalping bot'a başarıyla eklendi"}
             
         except Exception as e:
             return {"success": False, "message": f"{symbol} eklenirken hata: {e}"}
@@ -818,13 +818,13 @@ class BotCore:
     async def remove_symbol(self, symbol: str):
         """Çalışan bot'tan symbol çıkar"""
         if not self.status["is_running"]:
-            return {"success": False, "message": "Bollinger bot çalışmıyor"}
+            return {"success": False, "message": "EMA Cross bot çalışmıyor"}
             
         if symbol not in self.status["symbols"]:
             return {"success": False, "message": f"{symbol} zaten izlenmiyor"}
             
         if self.status["active_symbol"] == symbol:
-            return {"success": False, "message": f"{symbol} şu anda aktif Bollinger pozisyonunda"}
+            return {"success": False, "message": f"{symbol} şu anda aktif EMA Cross pozisyonunda"}
             
         try:
             # Symbol'ü listeden çıkar
@@ -846,14 +846,14 @@ class BotCore:
                     pass
                 del self._websocket_connections[symbol]
             
-            print(f"✅ {symbol} Bollinger bot'tan çıkarıldı")
-            return {"success": True, "message": f"{symbol} Bollinger bot'tan başarıyla çıkarıldı"}
+            print(f"✅ {symbol} EMA Cross bot'tan çıkarıldı")
+            return {"success": True, "message": f"{symbol} EMA Cross bot'tan başarıyla çıkarıldı"}
             
         except Exception as e:
             return {"success": False, "message": f"{symbol} çıkarılırken hata: {e}"}
 
     def get_multi_status(self):
-        """🎯 Bollinger Bands multi-coin bot durumunu döndür - Performance optimized"""
+        """🎯 EMA Cross Scalping multi-coin bot durumunu döndür - Performance optimized"""
         win_rate = 0
         total_trades = self.status["successful_trades"] + self.status["failed_trades"]
         if total_trades > 0:
@@ -861,7 +861,7 @@ class BotCore:
         
         return {
             "is_running": self.status["is_running"],
-            "strategy": "bollinger_bands",
+            "strategy": "ema_cross_scalping",
             "symbols": self.status["symbols"],
             "active_symbol": self.status["active_symbol"],
             "position_side": self.status["position_side"],
@@ -875,15 +875,16 @@ class BotCore:
             "position_manager": position_manager.get_status(),
             "signal_filters_active": self.status["signal_filters_active"],
             "filtered_signals_count": self.status["filtered_signals_count"],
-            "bollinger_signals_count": self.status["bollinger_signals_count"],
+            "ema_cross_signals_count": self.status["ema_cross_signals_count"],
             "successful_trades": self.status["successful_trades"],
             "failed_trades": self.status["failed_trades"],
             "win_rate": f"{win_rate:.1f}%",
-            "bollinger_config": {
-                "period": settings.BOLLINGER_PERIOD,
-                "std_dev": settings.BOLLINGER_STD_DEV,
-                "entry_lower": settings.BB_ENTRY_LOWER,
-                "entry_upper": settings.BB_ENTRY_UPPER,
+            "ema_cross_config": {
+                "fast_ema": settings.EMA_FAST_PERIOD,
+                "slow_ema": settings.EMA_SLOW_PERIOD,
+                "trend_ema": settings.EMA_TREND_PERIOD,
+                "rsi_period": settings.RSI_PERIOD,
+                "volume_period": settings.VOLUME_PERIOD,
                 "timeframe": settings.TIMEFRAME,
                 "leverage": settings.LEVERAGE,
                 "stop_loss": f"{settings.STOP_LOSS_PERCENT*100:.1f}%",
@@ -900,7 +901,7 @@ class BotCore:
     async def scan_all_positions(self):
         """Tüm açık pozisyonları manuel tarayıp TP/SL ekle"""
         if not self.status["is_running"]:
-            return {"success": False, "message": "Bollinger bot çalışmıyor"}
+            return {"success": False, "message": "EMA Cross bot çalışmıyor"}
             
         try:
             await position_manager._scan_and_protect_positions()
