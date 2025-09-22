@@ -14,13 +14,13 @@ class Settings:
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
     # --- İşlem Parametreleri (EMA CROSS SCALPING İÇİN OPTİMİZE) ---
-    LEVERAGE: int = 20                    # 20x kaldıraç - scalping için optimal
+    LEVERAGE: int = 10                    # 20x kaldıraç - scalping için optimal
     ORDER_SIZE_USDT: float = 50.0         # 50 USDT başlangıç
     TIMEFRAME: str = "5m"                 # Scalping için 5 dakika (15m de desteklenir)
     
     # --- Kâr/Zarar Ayarları (Scalping için optimize) ---
-    STOP_LOSS_PERCENT: float = 0.008      # %0.8 - scalping için sıkı SL
-    TAKE_PROFIT_PERCENT: float = 0.016    # %1.6 - 1:2 risk/reward ratio
+    STOP_LOSS_PERCENT: float = 0.004      # %0.8 - scalping için sıkı SL
+    TAKE_PROFIT_PERCENT: float = 0.005    # %1.6 - 1:2 risk/reward ratio
     
     # 🎯 --- EMA CROSS SCALPING STRATEJİSİ PARAMETRELERİ ---
     
