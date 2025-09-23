@@ -1,3 +1,5 @@
+# app/bot_core.py - TP/SL KORUMA ENTEGRASYONU ile
+
 import asyncio
 import json
 import websockets
@@ -31,13 +33,17 @@ class EnhancedBotCore:
             "clean_ema_signals_count": 0,
             "successful_trades": 0,
             "failed_trades": 0,
-            # 🎯 YENİ: Enhanced özellikler
+            # 🎯 Enhanced özellikler
             "position_reverses": 0,
             "partial_exits_executed": 0,
             "sl_tightenings": 0,
             "timeframe": settings.TIMEFRAME,
             "using_partial_exits": False,
-            "reverse_detection_active": settings.ENABLE_POSITION_REVERSE
+            "reverse_detection_active": settings.ENABLE_POSITION_REVERSE,
+            # 🛡️ TP/SL Koruma istatistikleri
+            "tp_sl_protection_active": True,
+            "tp_sl_restorations": 0,
+            "orphan_orders_cleaned": 0
         }
         
         self.multi_klines = {}
@@ -58,7 +64,8 @@ class EnhancedBotCore:
             "clean_signals": 0,
             "reverse_signals": 0,
             "partial_exit_profits": 0.0,
-            "sl_tightening_saves": 0.0
+            "sl_tightening_saves": 0.0,
+            "tp_sl_protection_saves": 0.0  # YENİ!
         }
         
         # Performance optimization (önceki sürümden)
@@ -68,15 +75,16 @@ class EnhancedBotCore:
         self._balance_calculation_interval = 60  # 60 saniye
         self._calculation_in_progress = False
         
-        print("🚀 ENHANCED EMA Cross Bot v4.0 başlatıldı")
+        print("🚀 ENHANCED EMA Cross Bot v4.1 başlatıldı")
         print(f"🎯 Strateji: Basitleştirilmiş EMA {settings.EMA_FAST_PERIOD}/{settings.EMA_SLOW_PERIOD}/{settings.EMA_TREND_PERIOD}")
         print(f"✅ Position Reverse: {'Aktif' if settings.ENABLE_POSITION_REVERSE else 'Deaktif'}")
         print(f"✅ Kademeli Satış: {'Aktif' if settings.ENABLE_PARTIAL_EXITS else 'Deaktif'}")
         print(f"✅ SL Tightening: {'Aktif' if settings.ENABLE_SL_TIGHTENING else 'Deaktif'}")
+        print(f"🛡️ TP/SL Koruma Sistemi: Aktif")
         print(f"⏰ Timeframe: {settings.TIMEFRAME}")
 
     async def start(self, symbols: list):
-        """Enhanced multi-coin bot başlatma"""
+        """Enhanced multi-coin bot başlatma - TP/SL korumalı"""
         if self.status["is_running"]:
             print("⚠️ Enhanced bot zaten çalışıyor.")
             return
@@ -94,25 +102,28 @@ class EnhancedBotCore:
             "status_message": f"🎯 Enhanced EMA Cross: {len(symbols)} coin başlatılıyor...",
             "timeframe": settings.TIMEFRAME,
             "using_partial_exits": settings.ENABLE_PARTIAL_EXITS,
-            "reverse_detection_active": settings.ENABLE_POSITION_REVERSE
+            "reverse_detection_active": settings.ENABLE_POSITION_REVERSE,
+            "tp_sl_protection_active": True
         })
         
         print(f"🚀 ENHANCED EMA CROSS Multi-coin bot başlatılıyor: {', '.join(symbols)}")
         
         try:
-            # 1. Binance bağlantısı
+            # 1. Binance bağlantısı (Enhanced TP/SL koruma ile)
             print("1️⃣ Enhanced Binance bağlantısı kuruluyor...")
             await binance_client.initialize()
             print("✅ Enhanced Binance bağlantısı başarılı")
+            print("🛡️ TP/SL koruma sistemi otomatik başlatıldı")
             
-            # 2. Yetim emir temizliği
-            print("2️⃣ 🧹 Tüm symboller için yetim emir temizliği...")
+            # 2. 🛡️ SADECE YETİM EMİRLERİ TEMİZ (TP/SL koruma ile)
+            print("2️⃣ 🧹 Enhanced yetim emir temizliği (TP/SL korunur)...")
             for symbol in symbols:
                 try:
-                    await binance_client.cancel_all_orders_safe(symbol)
+                    await binance_client._safe_cancel_orphan_orders(symbol)
+                    self.status["orphan_orders_cleaned"] += 1
                     await asyncio.sleep(0.2)
                 except Exception as cleanup_error:
-                    print(f"⚠️ {symbol} temizlik hatası: {cleanup_error}")
+                    print(f"⚠️ {symbol} enhanced temizlik hatası: {cleanup_error}")
             
             # 3. Hesap bakiyesi ve dinamik sizing
             print("3️⃣ Hesap bakiyesi ve dinamik pozisyon hesaplaması...")
@@ -154,8 +165,8 @@ class EnhancedBotCore:
                     print(f"❌ {symbol} hazırlık hatası: {symbol_error}")
                     continue
             
-            # 5. Mevcut açık pozisyon kontrolü
-            print("5️⃣ Mevcut açık pozisyonlar ve Enhanced features kontrol...")
+            # 5. 🛡️ MEVCUT AÇIK POZİSYON KONTROLÜ ve TP/SL KORUMA
+            print("5️⃣ Mevcut açık pozisyonlar ve Enhanced TP/SL koruma kontrol...")
             try:
                 await binance_client._rate_limit_delay()
                 all_positions = await binance_client.client.futures_position_information()
@@ -171,11 +182,14 @@ class EnhancedBotCore:
                     
                     print(f"⚠️ Mevcut {self.status['position_side']} pozisyonu: {active_symbol}")
                     
+                    # 🛡️ Mevcut pozisyon için TP/SL koruma kontrolü
+                    await self._ensure_position_protection(active_symbol, active_position)
+                    
                     # SL tightening kontrolü başlat
                     if settings.ENABLE_SL_TIGHTENING:
                         await self._check_sl_tightening(active_symbol)
                         
-                    # Position manager ile kontrol
+                    # Position manager ile Enhanced kontrol
                     await position_manager.manual_scan_symbol(active_symbol)
                 else:
                     print("✅ Açık pozisyon bulunamadı")
@@ -190,12 +204,12 @@ class EnhancedBotCore:
             except Exception as position_error:
                 print(f"❌ Pozisyon kontrolü hatası: {position_error}")
                 
-            # 7. Position Monitoring başlat
+            # 7. Enhanced Position Monitoring başlat
             print("7️⃣ 🛡️ Enhanced Position monitoring başlatılıyor...")
             try:
                 asyncio.create_task(position_manager.start_monitoring())
                 self.status["position_monitor_active"] = True
-                print("✅ Enhanced position koruması aktif")
+                print("✅ Enhanced position koruması aktif (15s interval)")
             except Exception as monitor_error:
                 print(f"⚠️ Position monitoring hatası: {monitor_error}")
                 
@@ -212,7 +226,7 @@ class EnhancedBotCore:
             self.status["using_partial_exits"] = using_partial
             
             partial_status = "KADEMELİ SATIŞ" if using_partial else "NORMAL TP/SL"
-            self.status["status_message"] = f"🎯 ENHANCED EMA: {len(valid_symbols)} coin izleniyor [{partial_status}] [REVERSE+SL_TIGHTENING]"
+            self.status["status_message"] = f"🎯 ENHANCED EMA: {len(valid_symbols)} coin izleniyor [{partial_status}] [REVERSE+SL_TIGHTENING+TP/SL_PROTECTION]"
             
             print(f"✅ {self.status['status_message']}")
             await self._start_multi_websocket_loop(valid_symbols)
@@ -225,6 +239,51 @@ class EnhancedBotCore:
         
         print("🛑 Enhanced bot durduruluyor...")
         await self.stop()
+
+    async def _ensure_position_protection(self, symbol: str, position: dict):
+        """🛡️ Mevcut pozisyon için TP/SL koruması sağla"""
+        try:
+            print(f"🛡️ {symbol} mevcut pozisyon koruması kontrol ediliyor...")
+            
+            position_amt = float(position['positionAmt'])
+            if position_amt == 0:
+                return
+                
+            # Açık emirleri kontrol et
+            await binance_client._rate_limit_delay()
+            open_orders = await binance_client.client.futures_get_open_orders(symbol=symbol)
+            
+            # TP/SL analizi
+            is_long = position_amt > 0
+            required_side = 'SELL' if is_long else 'BUY'
+            
+            has_sl = any(order['type'] in ['STOP_MARKET', 'STOP'] and 
+                        order.get('side') == required_side and 
+                        order.get('reduceOnly') for order in open_orders)
+                        
+            has_tp = any(order['type'] in ['TAKE_PROFIT_MARKET', 'TAKE_PROFIT', 'LIMIT'] and 
+                        order.get('side') == required_side and 
+                        order.get('reduceOnly') for order in open_orders)
+            
+            if has_sl and has_tp:
+                print(f"✅ {symbol} mevcut pozisyon zaten korumalı")
+                return
+                
+            print(f"⚠️ {symbol} mevcut pozisyon eksik koruma! SL: {has_sl}, TP: {has_tp}")
+            print(f"🛡️ Enhanced koruma sistemi eksik TP/SL'leri ekliyor...")
+            
+            # Position manager ile eksik korumaları ekle
+            success = await position_manager._enhanced_check_and_protect(position, force_scan=True)
+            
+            if success:
+                self.status["tp_sl_restorations"] += 1
+                self._performance_monitoring["tp_sl_protection_saves"] += 1
+                print(f"✅ {symbol} mevcut pozisyon koruması restore edildi!")
+            else:
+                print(f"❌ {symbol} mevcut pozisyon koruması restore edilemedi")
+                
+        except Exception as e:
+            print(f"❌ {symbol} pozisyon koruma kontrolü hatası: {e}")
 
     async def _start_multi_websocket_loop(self, symbols: list):
         """Multi-coin WebSocket döngüsü"""
@@ -290,7 +349,7 @@ class EnhancedBotCore:
             print(f"❌ {symbol} WebSocket maksimum deneme aşıldı")
 
     async def _handle_enhanced_websocket_message(self, symbol: str, message: str):
-        """Enhanced WebSocket mesaj işleme"""
+        """Enhanced WebSocket mesaj işleme - TP/SL koruma entegrasyonu ile"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
@@ -356,8 +415,8 @@ class EnhancedBotCore:
                     
                 self.status["last_signals"][symbol] = signal
                 
-                # Enhanced pozisyon mantığı
-                await self._handle_enhanced_position_logic(symbol, signal)
+                # Enhanced pozisyon mantığı (TP/SL koruma entegrasyonu ile)
+                await self._handle_enhanced_position_logic_protected(symbol, signal)
             
             # Aktif pozisyon varsa SL tightening kontrol et
             if (self.status["active_symbol"] == symbol and 
@@ -368,8 +427,8 @@ class EnhancedBotCore:
         except Exception as e:
             print(f"❌ {symbol} Enhanced WebSocket hatası: {e}")
 
-    async def _handle_enhanced_position_logic(self, signal_symbol: str, signal: str):
-        """Enhanced pozisyon yönetim mantığı"""
+    async def _handle_enhanced_position_logic_protected(self, signal_symbol: str, signal: str):
+        """🛡️ Enhanced pozisyon yönetim mantığı - TP/SL koruma entegrasyonu ile"""
         try:
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
@@ -377,7 +436,7 @@ class EnhancedBotCore:
             # DURUM 1: Hiç pozisyon yok, yeni sinyal geldi
             if not current_active_symbol and not current_position_side and signal != "HOLD":
                 print(f"🚀 Yeni Enhanced fırsatı: {signal_symbol} -> {signal}")
-                await self._open_enhanced_position(signal_symbol, signal)
+                await self._open_enhanced_position_protected(signal_symbol, signal)
                 return
             
             # DURUM 2: Mevcut pozisyon var, aynı symbol'den ters sinyal geldi (POSITION REVERSE!)
@@ -386,7 +445,7 @@ class EnhancedBotCore:
                 signal != "HOLD" and 
                 signal != current_position_side):
                 print(f"🔄 {signal_symbol} POSITION REVERSE: {current_position_side} -> {signal}")
-                await self._execute_position_reverse(signal_symbol, signal)
+                await self._execute_position_reverse_protected(signal_symbol, signal)
                 return
             
             # DURUM 3: Mevcut pozisyon var, başka symbol'den güçlü sinyal geldi
@@ -395,7 +454,7 @@ class EnhancedBotCore:
                 current_position_side and 
                 signal != "HOLD"):
                 print(f"💡 Yeni Enhanced coin fırsatı: {signal_symbol} -> {signal}")
-                await self._switch_to_enhanced_coin(current_active_symbol, signal_symbol, signal)
+                await self._switch_to_enhanced_coin_protected(current_active_symbol, signal_symbol, signal)
                 return
             
             # DURUM 4: Pozisyon kapanmış mı kontrol et (SL/TP)
@@ -403,15 +462,15 @@ class EnhancedBotCore:
                 open_positions = await binance_client.get_open_positions(current_active_symbol, use_cache=True)
                 if not open_positions:
                     print(f"✅ {current_active_symbol} pozisyonu Enhanced TP/SL ile kapandı")
-                    await self._handle_position_closed(current_active_symbol, signal_symbol, signal)
+                    await self._handle_position_closed_protected(current_active_symbol, signal_symbol, signal)
                         
         except Exception as e:
             print(f"❌ Enhanced pozisyon mantığı hatası: {e}")
 
-    async def _open_enhanced_position(self, symbol: str, signal: str):
-        """Enhanced pozisyon açma - kademeli satış destekli"""
+    async def _open_enhanced_position_protected(self, symbol: str, signal: str):
+        """🛡️ Enhanced pozisyon açma - TP/SL koruma entegrasyonu"""
         try:
-            print(f"🎯 {symbol} -> {signal} Enhanced pozisyonu açılıyor...")
+            print(f"🎯 {symbol} -> {signal} Enhanced pozisyonu açılıyor (TP/SL korumalı)...")
             
             # Test modu kontrolü
             if hasattr(settings, 'TEST_MODE') and settings.TEST_MODE:
@@ -422,8 +481,8 @@ class EnhancedBotCore:
             
             await asyncio.sleep(settings.API_CALL_DELAY)
             
-            # Yetim emir temizliği
-            await binance_client.cancel_all_orders_safe(symbol)
+            # 🛡️ TP/SL korumalı yetim emir temizliği
+            await binance_client._safe_cancel_orphan_orders(symbol)
             await asyncio.sleep(0.2)
             
             # Dinamik order size
@@ -448,7 +507,7 @@ class EnhancedBotCore:
 
             print(f"📊 {symbol} Enhanced Pozisyon: {side} {quantity} @ {price:.6f}")
             
-            # 🎯 ENHANCED: Akıllı çıkış sistemi (kademeli veya normal)
+            # 🎯 ENHANCED: TP/SL korumalı akıllı çıkış sistemi
             order = await binance_client.create_market_order_with_smart_exits(
                 symbol, side, quantity, price, 
                 self.price_precision.get(symbol, 2), 
@@ -461,9 +520,9 @@ class EnhancedBotCore:
                 
                 # Status mesajını güncelle
                 exit_type = "KADEMELİ" if self.status["using_partial_exits"] else "NORMAL"
-                self.status["status_message"] = f"🎯 ENHANCED {signal}: {symbol} @ {price:.6f} [{exit_type} ÇIKIŞ] 🛡️"
+                self.status["status_message"] = f"🎯 ENHANCED {signal}: {symbol} @ {price:.6f} [{exit_type} ÇIKIŞ] 🛡️ TP/SL KORUNUYOR"
                 
-                print(f"✅ {symbol} {signal} Enhanced pozisyonu açıldı!")
+                print(f"✅ {symbol} {signal} Enhanced pozisyonu açıldı (TP/SL korumalı)!")
                 
                 # Cache temizle
                 try:
@@ -471,7 +530,7 @@ class EnhancedBotCore:
                 except:
                     pass
                     
-                # Position manager'a bildir
+                # Position manager'a bildir (Enhanced kontrol için)
                 await asyncio.sleep(1)
                 await position_manager.manual_scan_symbol(symbol)
                 return True
@@ -483,10 +542,10 @@ class EnhancedBotCore:
             print(f"❌ {symbol} Enhanced pozisyon açma hatası: {e}")
             return False
 
-    async def _execute_position_reverse(self, symbol: str, new_signal: str):
-        """🔄 Position Reverse çalıştır"""
+    async def _execute_position_reverse_protected(self, symbol: str, new_signal: str):
+        """🔄 TP/SL korumalı Position Reverse"""
         try:
-            print(f"🔄 ENHANCED POSITION REVERSE: {symbol} -> {new_signal}")
+            print(f"🔄 ENHANCED POSITION REVERSE (TP/SL korumalı): {symbol} -> {new_signal}")
             
             # Reverse sayacını artır
             if symbol not in self._position_reverse_tracking:
@@ -500,7 +559,7 @@ class EnhancedBotCore:
                 print(f"⚠️ {symbol}: Max reverse count aşıldı ({settings.MAX_REVERSE_COUNT})")
                 return
             
-            # Mevcut pozisyonu kapat
+            # Mevcut pozisyonu kontrol et
             open_positions = await binance_client.get_open_positions(symbol, use_cache=False)
             if open_positions:
                 position = open_positions[0]
@@ -518,17 +577,30 @@ class EnhancedBotCore:
                     "timestamp": datetime.now(timezone.utc)
                 })
 
-                # Pozisyonu kapat
-                await binance_client.cancel_all_orders_safe(symbol)
+                # 🛡️ Mevcut pozisyonun TP/SL'lerini koru (sadece yetim emirleri iptal et)
+                print(f"🛡️ {symbol} Position reverse - TP/SL korunarak yetim emirler iptal ediliyor...")
+                await binance_client._safe_cancel_orphan_orders(symbol)
                 await asyncio.sleep(0.5)
                 
                 print(f"📉 {symbol} eski pozisyon kapatılıyor...")
-                # Burada pozisyonu kapatmak yerine direkt reverse pozisyonu açabiliriz
+                # Pozisyonu manuel kapat (market order ile)
+                try:
+                    close_order = await binance_client.client.futures_create_order(
+                        symbol=symbol,
+                        side=side_to_close,
+                        type='MARKET',
+                        quantity=abs(position_amt),
+                        reduceOnly=True
+                    )
+                    print(f"✅ {symbol} eski pozisyon kapatıldı")
+                    await asyncio.sleep(1)
+                except Exception as close_error:
+                    print(f"❌ {symbol} pozisyon kapatma hatası: {close_error}")
                 
-            # Yeni reverse pozisyonu aç
-            success = await self._open_enhanced_position(symbol, new_signal)
+            # Yeni reverse pozisyonu aç (TP/SL korumalı)
+            success = await self._open_enhanced_position_protected(symbol, new_signal)
             if success:
-                print(f"✅ {symbol} Position Reverse başarılı: {new_signal}")
+                print(f"✅ {symbol} Position Reverse başarılı: {new_signal} (TP/SL korumalı)")
             else:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
@@ -536,10 +608,10 @@ class EnhancedBotCore:
         except Exception as e:
             print(f"❌ {symbol} Position Reverse hatası: {e}")
 
-    async def _switch_to_enhanced_coin(self, current_symbol: str, new_symbol: str, new_signal: str):
-        """Enhanced coin değişimi"""
+    async def _switch_to_enhanced_coin_protected(self, current_symbol: str, new_symbol: str, new_signal: str):
+        """🛡️ Enhanced coin değişimi - TP/SL korumalı"""
         try:
-            print(f"🔄 ENHANCED COİN DEĞİŞİMİ: {current_symbol} -> {new_symbol} ({new_signal})")
+            print(f"🔄 ENHANCED COİN DEĞİŞİMİ (TP/SL korumalı): {current_symbol} -> {new_symbol} ({new_signal})")
             
             # Mevcut pozisyonu kapat
             open_positions = await binance_client.get_open_positions(current_symbol, use_cache=False)
@@ -554,11 +626,29 @@ class EnhancedBotCore:
                     "timestamp": datetime.now(timezone.utc)
                 })
                 
-                await binance_client.cancel_all_orders_safe(current_symbol)
+                # 🛡️ TP/SL korunarak yetim emirleri iptal et
+                await binance_client._safe_cancel_orphan_orders(current_symbol)
                 await asyncio.sleep(1)
 
-            # Yeni coin'de Enhanced pozisyonu aç
-            success = await self._open_enhanced_position(new_symbol, new_signal)
+                # Pozisyonu manuel kapat
+                position_amt = float(position['positionAmt'])
+                side_to_close = 'SELL' if position_amt > 0 else 'BUY'
+                
+                try:
+                    close_order = await binance_client.client.futures_create_order(
+                        symbol=current_symbol,
+                        side=side_to_close,
+                        type='MARKET',
+                        quantity=abs(position_amt),
+                        reduceOnly=True
+                    )
+                    print(f"✅ {current_symbol} pozisyon coin switch için kapatıldı")
+                    await asyncio.sleep(1)
+                except Exception as close_error:
+                    print(f"❌ {current_symbol} pozisyon kapatma hatası: {close_error}")
+
+            # Yeni coin'de Enhanced pozisyonu aç (TP/SL korumalı)
+            success = await self._open_enhanced_position_protected(new_symbol, new_signal)
             if not success:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
@@ -566,11 +656,10 @@ class EnhancedBotCore:
         except Exception as e:
             print(f"❌ Enhanced coin değişimi hatası: {e}")
 
-    async def _handle_position_closed(self, closed_symbol: str, signal_symbol: str, signal: str):
-        """Pozisyon kapandığında işlemler"""
+    async def _handle_position_closed_protected(self, closed_symbol: str, signal_symbol: str, signal: str):
+        """🛡️ Pozisyon kapandığında işlemler - TP/SL korumalı"""
         try:
-            # PnL kaydet
-            # (Burada last trade PnL alınabilir)
+            # PnL kaydet (burada last trade PnL alınabilir)
             
             # Pozisyon durumunu temizle
             self.status["active_symbol"] = None
@@ -579,10 +668,12 @@ class EnhancedBotCore:
             # Cache temizle
             self._cached_order_size = 0.0
             
-            # Eğer yeni sinyal varsa pozisyon aç
+            print(f"✅ {closed_symbol} pozisyonu TP/SL ile başarıyla kapandı")
+            
+            # Eğer yeni sinyal varsa pozisyon aç (TP/SL korumalı)
             if signal != "HOLD":
                 print(f"🚀 Pozisyon kapandıktan sonra yeni Enhanced fırsatı: {signal_symbol} -> {signal}")
-                await self._open_enhanced_position(signal_symbol, signal)
+                await self._open_enhanced_position_protected(signal_symbol, signal)
                 
         except Exception as e:
             print(f"❌ Position closed handling hatası: {e}")
@@ -602,16 +693,17 @@ class EnhancedBotCore:
                 
             self._last_sl_tightening_check[symbol] = current_time
             
-            # SL tightening dene
+            # SL tightening dene (TP korumalı)
             if await self._check_sl_tightening(symbol):
                 self.status["sl_tightenings"] += 1
-                print(f"✅ {symbol} SL tightening başarılı")
+                self._performance_monitoring["sl_tightening_saves"] += 1
+                print(f"✅ {symbol} SL tightening başarılı (TP korundu)")
                 
         except Exception as e:
             print(f"❌ {symbol} periyodik SL check hatası: {e}")
 
     async def _check_sl_tightening(self, symbol: str) -> bool:
-        """SL tightening kontrolü"""
+        """🛡️ SL tightening kontrolü - TP korumalı"""
         try:
             result = await binance_client.check_and_tighten_stop_loss(symbol)
             if result:
@@ -621,7 +713,7 @@ class EnhancedBotCore:
             print(f"❌ {symbol} SL tightening hatası: {e}")
             return False
 
-    # Önceki sürümden temel metodları koru
+    # Diğer metodlar aynı kalabilir...
     async def _calculate_dynamic_order_size(self):
         """Dinamik pozisyon boyutu hesapla"""
         if self._calculation_in_progress:
@@ -707,7 +799,7 @@ class EnhancedBotCore:
             print(f"❌ Enhanced status güncelleme hatası: {e}")
 
     def get_multi_status(self):
-        """Enhanced multi-coin bot durumunu döndür"""
+        """Enhanced multi-coin bot durumunu döndür - TP/SL koruma istatistikleri ile"""
         win_rate = 0
         total_trades = self.status["successful_trades"] + self.status["failed_trades"]
         if total_trades > 0:
@@ -716,7 +808,7 @@ class EnhancedBotCore:
         return {
             "is_running": self.status["is_running"],
             "strategy": "enhanced_ema_cross",
-            "version": "4.0_enhanced",
+            "version": "4.1_tp_sl_protected",  # YENİ VERSİYON!
             "symbols": self.status["symbols"],
             "active_symbol": self.status["active_symbol"],
             "position_side": self.status["position_side"],
@@ -733,9 +825,12 @@ class EnhancedBotCore:
             "timeframe": self.status["timeframe"],
             "using_partial_exits": self.status["using_partial_exits"],
             "reverse_detection_active": self.status["reverse_detection_active"],
+            "tp_sl_protection_active": self.status["tp_sl_protection_active"],  # YENİ!
             "position_reverses": self.status["position_reverses"],
             "partial_exits_executed": self.status["partial_exits_executed"],
             "sl_tightenings": self.status["sl_tightenings"],
+            "tp_sl_restorations": self.status["tp_sl_restorations"],  # YENİ!
+            "orphan_orders_cleaned": self.status["orphan_orders_cleaned"],  # YENİ!
             
             # Signal stats
             "filtered_signals_count": self.status["filtered_signals_count"],
@@ -754,6 +849,7 @@ class EnhancedBotCore:
                 "partial_exits": settings.ENABLE_PARTIAL_EXITS,
                 "position_reverse": settings.ENABLE_POSITION_REVERSE,
                 "sl_tightening": settings.ENABLE_SL_TIGHTENING,
+                "tp_sl_protection": True,  # YENİ!
                 "tp1_percent": f"{settings.TP1_PERCENT*100:.1f}%",
                 "tp2_percent": f"{settings.TP2_PERCENT*100:.1f}%",
                 "stop_loss": f"{settings.STOP_LOSS_PERCENT*100:.1f}%"
@@ -764,6 +860,7 @@ class EnhancedBotCore:
                 "total_signals": self._performance_monitoring["total_signals"],
                 "clean_signals": self._performance_monitoring["clean_signals"],
                 "reverse_signals": self._performance_monitoring["reverse_signals"],
+                "tp_sl_protection_saves": self._performance_monitoring["tp_sl_protection_saves"],  # YENİ!
                 "signal_quality": f"{(self._performance_monitoring['clean_signals'] / max(self._performance_monitoring['total_signals'], 1) * 100):.1f}%",
                 "reverse_tracking": dict(self._position_reverse_tracking),
                 "binance_client_status": binance_client.get_client_status()
@@ -800,34 +897,38 @@ class EnhancedBotCore:
             failed = self.status["failed_trades"]
             reverses = self.status["position_reverses"]
             sl_tightenings = self.status["sl_tightenings"]
+            tp_sl_restorations = self.status["tp_sl_restorations"]  # YENİ!
             
             if total_signals > 0:
                 success_rate = (successful / (successful + failed) * 100) if (successful + failed) > 0 else 0
-                print(f"📊 ENHANCED BOT İSTATİSTİKLERİ:")
+                print(f"📊 ENHANCED BOT İSTATİSTİKLERİ v4.1:")
                 print(f"   🎯 Toplam clean sinyal: {total_signals}")
                 print(f"   ✅ Başarılı: {successful}")
                 print(f"   ❌ Başarısız: {failed}")
                 print(f"   🔄 Position reverse: {reverses}")
                 print(f"   🛡️ SL tightening: {sl_tightenings}")
+                print(f"   🛡️ TP/SL koruması: {tp_sl_restorations}")  # YENİ!
                 print(f"   📈 Başarı oranı: %{success_rate:.1f}")
                 print(f"   🎯 Sinyal kalitesi: %{(self._performance_monitoring['clean_signals'] / max(self._performance_monitoring['total_signals'], 1) * 100):.1f}")
+                print(f"   🛡️ TP/SL koruma başarısı: {self._performance_monitoring['tp_sl_protection_saves']:.0f}")  # YENİ!
             
             self.status.update({
                 "is_running": False, 
                 "symbols": [],
                 "active_symbol": None,
-                "status_message": "Enhanced EMA Cross bot durduruldu.",
+                "status_message": "Enhanced EMA Cross bot durduruldu (TP/SL korumalı).",
                 "account_balance": 0.0,
                 "position_pnl": 0.0,
                 "order_size": 0.0,
                 "position_monitor_active": False,
-                "last_signals": {}
+                "last_signals": {},
+                "tp_sl_protection_active": False
             })
             
             print(f"✅ {self.status['status_message']}")
             await binance_client.close()
 
-    # Eski API uyumluluğu için mevcut metodları koru
+    # Diğer metodlar aynı kalır...
     async def add_symbol(self, symbol: str):
         # Eski uyumluluk için...
         pass
@@ -837,31 +938,32 @@ class EnhancedBotCore:
         pass
 
     async def scan_all_positions(self):
-        """Tüm açık pozisyonları manuel tarayıp TP/SL ekle"""
+        """Tüm açık pozisyonları manuel tarayıp Enhanced TP/SL ekle"""
         if not self.status["is_running"]:
             return {"success": False, "message": "Enhanced bot çalışmıyor"}
             
         try:
-            await position_manager._scan_and_protect_positions()
+            await position_manager._enhanced_scan_and_protect()
             return {
                 "success": True, 
-                "message": "Tüm pozisyonlar Enhanced protection ile tarandı",
-                "monitor_status": position_manager.get_status()
+                "message": "Tüm pozisyonlar Enhanced TP/SL protection ile tarandı",
+                "monitor_status": position_manager.get_status(),
+                "tp_sl_protection": "Aktif"
             }
         except Exception as e:
-            return {"success": False, "message": f"Tarama hatası: {e}"}
+            return {"success": False, "message": f"Enhanced tarama hatası: {e}"}
     
     async def scan_specific_symbol(self, symbol: str):
-        """Belirli bir coin için manuel TP/SL kontrolü"""
+        """Belirli bir coin için Enhanced TP/SL kontrolü"""
         try:
             success = await position_manager.manual_scan_symbol(symbol)
             return {
                 "success": success,
                 "symbol": symbol,
-                "message": f"{symbol} için Enhanced TP/SL kontrolü tamamlandı"
+                "message": f"{symbol} için Enhanced TP/SL kontrolü tamamlandı (koruma aktif)"
             }
         except Exception as e:
-            return {"success": False, "message": f"{symbol} kontrolü hatası: {e}"}
+            return {"success": False, "message": f"{symbol} Enhanced kontrolü hatası: {e}"}
 
 # Global enhanced instance
 bot_core = EnhancedBotCore()
