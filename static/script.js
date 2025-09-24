@@ -589,7 +589,13 @@ document.addEventListener('DOMContentLoaded', () => {
             statsWinRate.textContent = `%${winRate}`;
         }
     }
-// ============ EMA DEBUG TEST - script.js'e ekleyin ============
+
+    // ============ BAŞLANGIÇ MESAJI ============
+    
+    console.log('🎯 Basit EMA Cross Bot v1.0 yüklendi');
+    console.log('⚡ API Rate Limit sorunu düzeltildi: 45s/60s interval');
+    console.log('🚀 Bot hazır!');
+    // ============ EMA DEBUG TEST - script.js'e ekleyin ============
     
     const debugSymbolInput = document.getElementById('debug-symbol-input');
     const debugEmaButton = document.getElementById('debug-ema-button');
@@ -689,35 +695,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // ============ KLAVYE KISAYOLLARI ============
-    
-    if (multiSymbolsInput) {
-        multiSymbolsInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && multiStartButton && !multiStartButton.disabled) {
-                multiStartButton.click();
-            }
-        });
-    }
-
-    if (singleSymbolInput) {
-        singleSymbolInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && singleStartButton && !singleStartButton.disabled) {
-                singleStartButton.click();
-            }
-        });
-    }
-
-    if (scanSymbolInput) {
-        scanSymbolInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && scanSymbolButton && !scanSymbolButton.disabled) {
-                scanSymbolButton.click();
-            }
-        });
-    }
-
-    // ============ BAŞLANGIÇ MESAJI ============
-    
-    console.log('🎯 Basit EMA Cross Bot v1.0 yüklendi');
-    console.log('⚡ API Rate Limit sorunu düzeltildi: 45s/60s interval');
-    console.log('🚀 Bot hazır!');
 });
