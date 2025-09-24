@@ -92,6 +92,8 @@
                     <p class="status-value"><span id="active-position">Hayır</span></p>
                     <p class="status-label">WebSocket Bağlantıları:</p>
                     <p class="status-value"><span id="websocket-count">0</span></p>
+                    <p class="status-label">Son Güncelleme:</p>
+                    <p class="status-value"><span id="last-update">-</span></p>
                 </div>
             </div>
 
@@ -108,6 +110,7 @@
                 <div class="button-group">
                     <button id="multi-start-button" class="btn btn-start">🚀 Multi-Coin Bot Başlat</button>
                     <button id="stop-button" class="btn btn-stop" disabled>🛑 Bot Durdur</button>
+                    <button id="refresh-button" class="btn btn-info">🔄 Manuel Yenile</button>
                 </div>
 
                 <div class="strategy-settings">
@@ -231,6 +234,7 @@
             const multiSymbolsInput = document.getElementById('multi-symbols-input');
             const multiStartButton = document.getElementById('multi-start-button');
             const stopButton = document.getElementById('stop-button');
+            const refreshButton = document.getElementById('refresh-button');
             const singleSymbolInput = document.getElementById('single-symbol-input');
             const singleStartButton = document.getElementById('single-start-button');
             
@@ -239,6 +243,7 @@
             const monitoredSymbolsSpan = document.getElementById('monitored-symbols');
             const activePositionSpan = document.getElementById('active-position');
             const websocketCountSpan = document.getElementById('websocket-count');
+            const lastUpdateSpan = document.getElementById('last-update');
             const symbolsCard = document.getElementById('symbols-card');
             const symbolsList = document.getElementById('symbols-list');
             
@@ -256,6 +261,14 @@
             let statusInterval;
             let isMonitorRunning = false;
 
+            // ⚡ API RATE SORUNU DÜZELTİLDİ
+            // Eski: Her 8 saniyede bir istek (çok fazla!)
+            // Yeni: Bot çalışırken 45 saniye, durmuşken 60 saniye
+            const STATUS_UPDATE_INTERVALS = {
+                BOT_RUNNING: 45000,      // Bot çalışırken 45 saniyede bir
+                BOT_STOPPED: 60000       // Bot durakken 60 saniyede bir
+            };
+
             // Kimlik doğrulama
             loginButton.addEventListener('click', () => {
                 loginError.textContent = "";
@@ -269,8 +282,8 @@
                 if (user) {
                     loginContainer.style.display = 'none';
                     appContainer.style.display = 'flex';
-                    getStatus();
-                    statusInterval = setInterval(getStatus, 8000);
+                    getStatus(); // İlk status al
+                    startOptimizedStatusUpdates(); // Optimize edilmiş güncelleme başlat
                     listenForTradeUpdates();
                     updateMonitorButton();
                 } else {
@@ -279,6 +292,37 @@
                     if (statusInterval) clearInterval(statusInterval);
                 }
             });
+
+            // API RATE SORUNU DÜZELTİLDİ - Dinamik interval
+            function startOptimizedStatusUpdates() {
+                if (statusInterval) clearInterval(statusInterval);
+                
+                const updateStatus = async () => {
+                    await getStatus();
+                    
+                    // Bot durumuna göre dinamik interval
+                    const currentStatus = await getCurrentBotStatus();
+                    const interval = currentStatus.is_running ? 
+                        STATUS_UPDATE_INTERVALS.BOT_RUNNING : 
+                        STATUS_UPDATE_INTERVALS.BOT_STOPPED;
+                    
+                    // Sonraki güncellemeyi zamanla
+                    if (statusInterval) clearTimeout(statusInterval);
+                    statusInterval = setTimeout(updateStatus, interval);
+                };
+                
+                updateStatus(); // İlk çalıştırma
+            }
+
+            async function getCurrentBotStatus() {
+                try {
+                    // Sadece bot durumunu kontrol etmek için lightweight bir check
+                    // Eğer bu endpoint yoksa, mevcut status'tan al
+                    return { is_running: statusMessageSpan.textContent.includes('izleniyor') };
+                } catch (e) {
+                    return { is_running: false };
+                }
+            }
 
             // API istekleri
             async function fetchApi(endpoint, options = {}) {
@@ -310,10 +354,17 @@
             function showSuccess(message) {
                 console.log("BAŞARILI:", message);
             }
+
+            function updateLastUpdateTime() {
+                const now = new Date();
+                lastUpdateSpan.textContent = now.toLocaleTimeString('tr-TR');
+            }
             
             // UI Güncelleme
             const updateUI = (data) => {
                 if (!data) return;
+                
+                updateLastUpdateTime();
                 
                 // Durum mesajı
                 statusMessageSpan.textContent = data.status_message || 'Bilinmiyor';
@@ -351,7 +402,7 @@
                     singleStartButton.disabled = true;
                     stopButton.disabled = false;
                     multiSymbolsInput.disabled = true;
-                    singleSymbolInput.disabled = true;
+                    singleSymbolInput.disabled = false;
                 } else {
                     multiStartButton.disabled = false;
                     singleStartButton.disabled = false;
@@ -407,9 +458,21 @@
                 });
             }
 
-            const getStatus = async () => updateUI(await fetchApi('/api/multi-status'));
+            const getStatus = () => fetchApi('/api/multi-status').then(updateUI);
 
-            // Event listeners
+            // Manuel refresh butonu - rate limit sorunu çözmek için
+            refreshButton.addEventListener('click', async () => {
+                refreshButton.disabled = true;
+                refreshButton.textContent = 'Yenileniyor...';
+                
+                await getStatus();
+                
+                refreshButton.disabled = false;
+                refreshButton.textContent = '🔄 Manuel Yenile';
+                showSuccess('Durum yenilendi');
+            });
+
+            // Event listeners (aynı)
             multiStartButton.addEventListener('click', async () => {
                 const symbolsInput = multiSymbolsInput.value.trim();
                 if (!symbolsInput) {
@@ -440,6 +503,8 @@
                 if (result) {
                     updateUI(result.status);
                     showSuccess(`${symbols.length} coin için bot başlatıldı`);
+                    // Bot başlatıldığında status güncellemesini yeniden başlat
+                    startOptimizedStatusUpdates();
                 }
             });
 
@@ -472,6 +537,7 @@
                     };
                     updateUI(multiResult);
                     showSuccess(`Tek coin modu: ${symbol} başlatıldı`);
+                    startOptimizedStatusUpdates();
                 }
             });
 
@@ -480,10 +546,12 @@
                 if (result) {
                     updateUI(result);
                     showSuccess('Bot durduruldu');
+                    // Bot durdurulduğunda güncelleme sıklığını azalt
+                    startOptimizedStatusUpdates();
                 }
             });
 
-            // Position management
+            // Position management (aynı)
             scanAllButton.addEventListener('click', async () => {
                 scanAllButton.disabled = true;
                 scanAllButton.textContent = 'Taranıyor...';
