@@ -1,4 +1,4 @@
-# app/main.py - Basit EMA Cross Bot API
+# app/main.py - Basit EMA Cross Bot API - Debug endpoint eklendi
 
 import asyncio
 import time
@@ -12,15 +12,17 @@ from .bot_core import bot_core
 from .config import settings
 from .firebase_manager import firebase_manager
 from .position_manager import position_manager
+from .binance_client import binance_client
+from .trading_strategy import trading_strategy
 
 bearer_scheme = HTTPBearer()
 
-app = FastAPI(title="Basit EMA Cross Bot v1.0", version="1.0.0")
+app = FastAPI(title="Basit EMA Cross Bot v1.0 - FIXED", version="1.0.1")
 
 @app.on_event("startup")
 async def startup_event():
     """Uygulama başlangıcı"""
-    print("🚀 Basit EMA Cross Bot v1.0 başlatılıyor...")
+    print("🚀 Basit EMA Cross Bot v1.0 - SORUN DÜZELTİLDİ başlatılıyor...")
     settings.validate_settings()
     settings.print_settings()
 
@@ -35,6 +37,9 @@ class MultiStartRequest(BaseModel):
     symbols: List[str]
 
 class SymbolRequest(BaseModel):
+    symbol: str
+
+class DebugRequest(BaseModel):
     symbol: str
 
 # ============ KİMLİK DOĞRULAMA ============
@@ -96,7 +101,8 @@ async def start_multi_bot(request: MultiStartRequest, background_tasks: Backgrou
             "symbols": normalized_symbols,
             "user": user.get('email'),
             "timestamp": time.time(),
-            "status": current_status
+            "status": current_status,
+            "fix_version": "1.0.1_nan_fixed"
         }
         
     except Exception as e:
@@ -160,6 +166,58 @@ async def start_bot_legacy(request: dict, background_tasks: BackgroundTasks, use
         "order_size": status.get("order_size", 0)
     }
 
+# ============ YENİ DEBUG ENDPOINT ============
+
+@app.post("/api/debug-ema")
+async def debug_ema_analysis(request: DebugRequest, user: dict = Depends(authenticate)):
+    """🐛 EMA hesaplamalarını test et ve debug et"""
+    symbol = request.symbol.upper().strip()
+    
+    if not symbol.endswith('USDT'):
+        symbol += 'USDT'
+    
+    print(f"🐛 {user.get('email')} debug isteği: {symbol}")
+    
+    try:
+        # Binance bağlantısını başlat
+        if not binance_client.client:
+            await binance_client.initialize()
+        
+        # Geçmiş veriyi al
+        required_candles = settings.EMA_SLOW_PERIOD + 20
+        klines = await binance_client.get_historical_klines(symbol, settings.TIMEFRAME, limit=required_candles)
+        
+        if not klines or len(klines) < 20:
+            raise HTTPException(status_code=404, detail=f"{symbol} için yeterli veri bulunamadı")
+        
+        # EMA analizini test et
+        current_signal = trading_strategy.analyze_klines(klines, symbol)
+        debug_info = trading_strategy.get_debug_info(klines, symbol)
+        strategy_status = trading_strategy.get_strategy_status(symbol)
+        
+        return {
+            "success": True,
+            "symbol": symbol,
+            "timeframe": settings.TIMEFRAME,
+            "current_signal": current_signal,
+            "debug_info": debug_info,
+            "strategy_status": strategy_status,
+            "klines_count": len(klines),
+            "user": user.get('email'),
+            "timestamp": time.time(),
+            "fix_version": "1.0.1_nan_safe"
+        }
+        
+    except Exception as e:
+        print(f"❌ Debug hatası: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "symbol": symbol,
+            "user": user.get('email'),
+            "timestamp": time.time()
+        }
+
 @app.get("/api/health")
 async def health_check():
     """Sağlık kontrolü"""
@@ -178,10 +236,15 @@ async def health_check():
             "binance_connection": binance_status,
             "position_manager": position_manager_status,
             "environment": settings.ENVIRONMENT,
-            "version": "1.0.0_simple",
-            "strategy": "simple_ema_cross",
+            "version": "1.0.1_fixed",
+            "strategy": "safe_ema_cross",
             "debug_mode": settings.DEBUG_MODE,
-            "test_mode": settings.TEST_MODE
+            "test_mode": settings.TEST_MODE,
+            "fix_notes": [
+                "✅ NaN handling düzeltildi",
+                "✅ Boolean operations güvenli",
+                "✅ Debug endpoint eklendi"
+            ]
         }
         
     except Exception as e:
@@ -189,7 +252,7 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e),
             "timestamp": time.time(),
-            "version": "1.0.0_simple"
+            "version": "1.0.1_fixed"
         }
 
 # ============ POZİSYON YÖNETİMİ ============
@@ -291,7 +354,7 @@ async def exception_handler(request, exc):
         "error": "Bot'ta beklenmeyen hata oluştu",
         "detail": str(exc),
         "timestamp": time.time(),
-        "version": "1.0.0_simple"
+        "version": "1.0.1_fixed"
     }
 
 # ============ STATIC FILES ============
