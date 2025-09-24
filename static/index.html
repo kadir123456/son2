@@ -168,6 +168,28 @@
                 </div>
                 <button id="scan-symbol-button" class="btn btn-info">🎯 Coin Kontrol Et</button>
             </div>
+            <!-- Bu kodu static/index.html dosyasına, POZİSYON KORUMASI kartından sonra ekleyin -->
+
+<!-- EMA DEBUG TEST -->
+<div class="card controls-card">
+    <h2>🐛 EMA Signal Debug</h2>
+    <p class="subtitle">EMA cross sinyallerini test edin ve doğrulayın</p>
+    
+    <div class="form-group">
+        <label for="debug-symbol-input">Debug Symbol</label>
+        <input type="text" id="debug-symbol-input" placeholder="Örn: BTCUSDT, ETHUSDT">
+    </div>
+    
+    <div class="button-group">
+        <button id="debug-ema-button" class="btn btn-info">🐛 EMA Sinyali Test Et</button>
+    </div>
+    
+    <!-- Debug sonuçları -->
+    <div id="debug-results" style="display: none; margin-top: 1rem;">
+        <h3>🔍 Debug Sonuçları</h3>
+        <div id="debug-output" style="background: #0d1117; padding: 1rem; border-radius: 6px; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
+    </div>
+</div>
 
             <!-- İSTATİSTİKLER -->
             <div class="card stats-card">
