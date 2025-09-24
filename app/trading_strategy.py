@@ -5,10 +5,10 @@ from .config import settings
 
 class SimpleEMACrossStrategy:
     """
-    🎯 BASİT EMA Cross Stratejisi - DÜZELTILDI
+    🎯 BASİT EMA Cross Stratejisi - SORUN DÜZELTİLDİ
     - EMA 9 > EMA 21 OLURSA = LONG
-    - EMA 9 < EMA 21 OLURSA = SHORT
-    - Cross mantığı düzeltildi!
+    - EMA 9 < EMA 21 OLURSA = SHORT  
+    - NaN handling ve Boolean operation sorunları düzeltildi!
     """
     
     def __init__(self):
@@ -19,16 +19,17 @@ class SimpleEMACrossStrategy:
         self.last_signal_time = {}     # Her symbol için son sinyal zamanı
         self.signal_count = {}         # Signal statistics
         
-        print(f"🎯 DÜZELTILMIŞ EMA CROSS Stratejisi:")
+        print(f"🎯 DÜZELTİLMİŞ EMA CROSS Stratejisi:")
         print(f"   EMA Fast: {self.ema_fast}")
         print(f"   EMA Slow: {self.ema_slow}")
-        print(f"   ✅ Cross mantığı düzeltildi!")
+        print(f"   ✅ NaN handling düzeltildi!")
+        print(f"   ✅ Boolean operations güvenli!")
         print(f"   📈 EMA9 > EMA21 keserse = LONG")
         print(f"   📉 EMA9 < EMA21 keserse = SHORT")
 
     def analyze_klines(self, klines: list, symbol: str = "UNKNOWN") -> str:
         """
-        🎯 DÜZELTILMIŞ EMA Cross analizi
+        🎯 DÜZELTİLMİŞ EMA Cross analizi - NaN safe
         """
         # Sayaçları başlat
         if symbol not in self.signal_count:
@@ -48,11 +49,11 @@ class SimpleEMACrossStrategy:
                 print(f"❌ {symbol}: DataFrame oluşturulamadı")
                 return "HOLD"
             
-            # EMA'ları hesapla
-            df = self._calculate_emas(df)
+            # EMA'ları hesapla - NaN safe
+            df = self._calculate_emas_safe(df)
             
-            # ✅ DÜZELTILMIŞ EMA Cross sinyalini al
-            signal = self._get_ema_cross_signal_fixed(df, symbol)
+            # ✅ DÜZELTİLMİŞ EMA Cross sinyalini al
+            signal = self._get_ema_cross_signal_safe(df, symbol)
             
             # Sinyal geçmişini güncelle
             if signal != "HOLD":
@@ -63,11 +64,12 @@ class SimpleEMACrossStrategy:
             return signal
             
         except Exception as e:
-            print(f"❌ {symbol} analizi hatası: {e}")
+            print(f"❌ {symbol} EMA analizi hatası: {e}")
+            print(f"❌ Hata detayı: {type(e).__name__}")
             return "HOLD"
 
     def _prepare_dataframe(self, klines: list) -> pd.DataFrame:
-        """DataFrame hazırla"""
+        """DataFrame hazırla - güvenli"""
         try:
             if not klines or len(klines) == 0:
                 return None
@@ -86,9 +88,13 @@ class SimpleEMACrossStrategy:
             for col in numeric_columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # NaN kontrolü
+            # NaN kontrolü - forward fill ile doldur
             if df[numeric_columns].isnull().any().any():
                 df[numeric_columns] = df[numeric_columns].fillna(method='ffill')
+                
+            # Hala NaN varsa backward fill
+            if df[numeric_columns].isnull().any().any():
+                df[numeric_columns] = df[numeric_columns].fillna(method='bfill')
             
             return df if not df.empty and len(df) >= 10 else None
             
@@ -96,67 +102,101 @@ class SimpleEMACrossStrategy:
             print(f"❌ DataFrame hazırlama hatası: {e}")
             return None
 
-    def _calculate_emas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """EMA'ları hesapla - Doğru formül"""
+    def _calculate_emas_safe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        ✅ DÜZELTİLMİŞ EMA hesaplama - NaN safe Boolean operations
+        """
         try:
             # ✅ DOĞRU EMA Hesaplama
-            # EMA 9 (Hızlı) - span=9 kullan
             df['ema9'] = df['close'].ewm(span=self.ema_fast, adjust=False).mean()
-            
-            # EMA 21 (Yavaş) - span=21 kullan
             df['ema21'] = df['close'].ewm(span=self.ema_slow, adjust=False).mean()
             
-            # ✅ DOĞRU Cross durumu - Boolean değerler
-            df['ema9_above_ema21'] = df['ema9'] > df['ema21']
+            # NaN kontrolü - EMA değerlerini kontrol et
+            df['ema9'] = df['ema9'].fillna(df['close'])
+            df['ema21'] = df['ema21'].fillna(df['close'])
             
-            # ✅ DOĞRU Cross detection - Bir önceki ile karşılaştır
-            df['prev_ema9_above'] = df['ema9_above_ema21'].shift(1)
+            # ✅ GÜVENLI Boolean operasyonlar
+            # fillna ile NaN değerleri False yapıyoruz
+            df['ema9_above_ema21'] = (df['ema9'] > df['ema21']).fillna(False)
             
-            # Cross flag'leri
-            df['bullish_cross'] = (~df['prev_ema9_above']) & df['ema9_above_ema21']  # False → True
-            df['bearish_cross'] = df['prev_ema9_above'] & (~df['ema9_above_ema21'])  # True → False
+            # ✅ GÜVENLI shift operasyonu
+            df['prev_ema9_above'] = df['ema9_above_ema21'].shift(1).fillna(False)
+            
+            # ✅ GÜVENLI Cross detection - NaN'lar False olarak işleniyor
+            # Bullish cross: Önceki mum False, şimdiki True
+            df['bullish_cross'] = (~df['prev_ema9_above']) & df['ema9_above_ema21']
+            
+            # Bearish cross: Önceki mum True, şimdiki False  
+            df['bearish_cross'] = df['prev_ema9_above'] & (~df['ema9_above_ema21'])
+            
+            # Güvenlik için NaN'ları False yap
+            df['bullish_cross'] = df['bullish_cross'].fillna(False)
+            df['bearish_cross'] = df['bearish_cross'].fillna(False)
             
             return df
             
         except Exception as e:
-            print(f"❌ EMA hesaplama hatası: {e}")
-            return df
+            print(f"❌ EMA hesaplama hatası (DÜZELTİLDİ): {e}")
+            # Hata durumunda temel hesaplama yap
+            try:
+                df['ema9'] = df['close'].rolling(window=self.ema_fast).mean()
+                df['ema21'] = df['close'].rolling(window=self.ema_slow).mean()
+                df['ema9_above_ema21'] = (df['ema9'] > df['ema21']).fillna(False)
+                df['prev_ema9_above'] = df['ema9_above_ema21'].shift(1).fillna(False)
+                df['bullish_cross'] = False
+                df['bearish_cross'] = False
+                print(f"⚠️ Fallback EMA hesaplama kullanıldı")
+                return df
+            except:
+                print(f"❌ Fallback EMA de başarısız")
+                return df
 
-    def _get_ema_cross_signal_fixed(self, df: pd.DataFrame, symbol: str) -> str:
+    def _get_ema_cross_signal_safe(self, df: pd.DataFrame, symbol: str) -> str:
         """
-        ✅ DÜZELTILMIŞ EMA Cross sinyal mantığı
+        ✅ DÜZELTİLMİŞ EMA Cross sinyal mantığı - tamamen güvenli
         """
         try:
             if len(df) < 3:
                 return "HOLD"
                 
             current_row = df.iloc[-1]
-            prev_row = df.iloc[-2]
+            prev_row = df.iloc[-2] if len(df) > 1 else current_row
             
-            # NaN kontrolü
-            if pd.isna(current_row['ema9']) or pd.isna(current_row['ema21']):
-                print(f"⚠️ {symbol}: EMA değerlerinde NaN")
+            # NaN kontrolü - güvenli erişim
+            def safe_get(row, column, default=0.0):
+                try:
+                    value = row.get(column, default)
+                    return value if pd.notna(value) else default
+                except:
+                    return default
+            
+            def safe_get_bool(row, column, default=False):
+                try:
+                    value = row.get(column, default)
+                    return bool(value) if pd.notna(value) else default
+                except:
+                    return default
+            
+            # Güvenli değer alma
+            current_price = safe_get(current_row, 'close')
+            ema9 = safe_get(current_row, 'ema9')
+            ema21 = safe_get(current_row, 'ema21')
+            ema9_above = safe_get_bool(current_row, 'ema9_above_ema21')
+            bullish_cross = safe_get_bool(current_row, 'bullish_cross')
+            bearish_cross = safe_get_bool(current_row, 'bearish_cross')
+            
+            # Temel validation
+            if current_price <= 0 or ema9 <= 0 or ema21 <= 0:
+                print(f"⚠️ {symbol}: Geçersiz fiyat değerleri")
                 return "HOLD"
             
-            # Mevcut değerler
-            current_price = current_row['close']
-            ema9 = current_row['ema9']
-            ema21 = current_row['ema21']
-            ema9_above = current_row['ema9_above_ema21']
-            bullish_cross = current_row['bullish_cross']
-            bearish_cross = current_row['bearish_cross']
-            
-            # Debug bilgisi
-            print(f"🔍 {symbol} DÜZELTILMIŞ EMA Analizi:")
-            print(f"   📊 Fiyat: {current_price:.6f}")
-            print(f"   📈 EMA9:  {ema9:.6f}")
-            print(f"   📊 EMA21: {ema21:.6f}")
-            print(f"   ⚖️  EMA9 > EMA21: {ema9_above}")
-            print(f"   🚀 Bullish Cross: {bullish_cross}")
-            print(f"   📉 Bearish Cross: {bearish_cross}")
+            # Debug bilgisi - daha az verbose
+            if symbol.endswith('BTC') or symbol.endswith('ETH'):  # Sadece major coinler için log
+                print(f"🔍 {symbol} EMA: Fiyat={current_price:.4f}, EMA9={ema9:.4f}, EMA21={ema21:.4f}")
+                print(f"   EMA9>EMA21: {ema9_above}, Bull: {bullish_cross}, Bear: {bearish_cross}")
             
             # ===========================================
-            # ✅ DÜZELTILMIŞ EMA CROSS SİNYAL MANTIĞI
+            # ✅ DÜZELTİLMİŞ EMA CROSS SİNYAL MANTIĞI
             # ===========================================
             
             # 🚀 BULLISH CROSS - EMA9 EMA21'i yukarı kestiği an
@@ -169,61 +209,67 @@ class SimpleEMACrossStrategy:
                 print(f"📉 {symbol}: BEARISH CROSS! EMA9 aşağı kesti EMA21'i → SHORT")
                 return "SHORT"
             
-            # Cross yok, mevcut trend devam ediyor
-            trend = "YUKARIDA" if ema9_above else "AŞAĞIDA"
-            print(f"⏸️ {symbol}: Cross yok, EMA9 {trend} → HOLD")
+            # Cross yok, HOLD
             return "HOLD"
             
         except Exception as e:
-            print(f"❌ {symbol} sinyal hesaplama hatası: {e}")
+            print(f"❌ {symbol} sinyal hesaplama hatası (GÜVENLI): {e}")
             return "HOLD"
 
     def get_debug_info(self, klines: list, symbol: str) -> dict:
         """
-        🐛 Debug için detaylı EMA bilgisi
+        🐛 Debug için detaylı EMA bilgisi - güvenli
         """
         try:
             df = self._prepare_dataframe(klines)
             if df is None:
                 return {"error": "DataFrame oluşturulamadı"}
             
-            df = self._calculate_emas(df)
+            df = self._calculate_emas_safe(df)
             
-            # Son 5 mumun detayları
-            last_5 = df.tail(5)[['close', 'ema9', 'ema21', 'ema9_above_ema21', 'bullish_cross', 'bearish_cross']]
+            # Güvenli erişim
+            if len(df) == 0:
+                return {"error": "DataFrame boş"}
+                
+            last_row = df.iloc[-1]
+            
+            # Son 3 mumun detayları (daha az memory kullanımı)
+            last_3 = df.tail(3)[['close', 'ema9', 'ema21', 'ema9_above_ema21', 'bullish_cross', 'bearish_cross']]
             
             return {
                 "symbol": symbol,
                 "total_candles": len(df),
-                "current_price": float(df.iloc[-1]['close']),
-                "current_ema9": float(df.iloc[-1]['ema9']),
-                "current_ema21": float(df.iloc[-1]['ema21']),
-                "ema9_above": bool(df.iloc[-1]['ema9_above_ema21']),
-                "bullish_cross": bool(df.iloc[-1]['bullish_cross']),
-                "bearish_cross": bool(df.iloc[-1]['bearish_cross']),
-                "last_5_candles": last_5.to_dict('records')
+                "current_price": float(last_row.get('close', 0)),
+                "current_ema9": float(last_row.get('ema9', 0)),
+                "current_ema21": float(last_row.get('ema21', 0)),
+                "ema9_above": bool(last_row.get('ema9_above_ema21', False)),
+                "bullish_cross": bool(last_row.get('bullish_cross', False)),
+                "bearish_cross": bool(last_row.get('bearish_cross', False)),
+                "last_3_candles": last_3.to_dict('records'),
+                "fix_status": "NaN handling ve Boolean operations düzeltildi"
             }
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": f"Debug hatası: {str(e)}"}
 
     def get_strategy_status(self, symbol: str) -> dict:
         """Strateji durumunu döndür"""
         return {
-            "strategy_version": "1.1_fixed_ema_cross",
-            "strategy_type": "fixed_ema_cross",
+            "strategy_version": "1.2_fixed_nan_handling",
+            "strategy_type": "safe_ema_cross",
             "symbol": symbol,
             "ema_fast": self.ema_fast,
             "ema_slow": self.ema_slow,
             "signal_count": self.signal_count.get(symbol, {}),
             "last_signal_time": self.last_signal_time.get(symbol),
-            "description": "DÜZELTILDI: EMA 9/21 doğru cross sinyalleri",
+            "description": "GÜVENLİ: NaN handling ve Boolean ops düzeltildi",
             "fix_notes": [
-                "✅ Cross mantığı düzeltildi",
-                "✅ Bullish cross: EMA9 yukarı kesti EMA21",
-                "✅ Bearish cross: EMA9 aşağı kesti EMA21",
-                "✅ Debug bilgileri eklendi"
+                "✅ NaN değerler güvenli şekilde handle ediliyor",
+                "✅ Boolean operasyonlar fillna ile korunuyor", 
+                "✅ ~ operatörü hataları düzeltildi",
+                "✅ Cross detection tamamen güvenli",
+                "✅ Fallback mekanizması eklendi"
             ]
         }
 
-# Global instance - Düzeltilmiş strateji
+# Global instance - Düzeltilmiş güvenli strateji
 trading_strategy = SimpleEMACrossStrategy()
