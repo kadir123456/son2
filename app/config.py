@@ -20,7 +20,7 @@ class Settings:
     
     # --- TP/SL Ayarları ---
     STOP_LOSS_PERCENT: float = 0.008      # %0.8 stop loss
-    TAKE_PROFIT_PERCENT: float = 0.015    # %1.5 take profit
+    TAKE_PROFIT_PERCENT: float = 0.010   # %1.5 take profit
     
     # --- EMA Parametreleri ---
     EMA_FAST_PERIOD: int = 9              # Hızlı EMA
