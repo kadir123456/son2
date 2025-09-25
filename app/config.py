@@ -65,7 +65,7 @@ class OptimizedSettings:
     # --- ✅ GÜVENLI Debug Ayarları ---
     DEBUG_MODE: bool = True                 # ✅ Debug aktif
     TEST_MODE: bool = False                 # ✅ Canlı işlem (False = LIVE)
-    VERBOSE_LOGGING: bool = False           # ✅ Az log (performance)
+    VERBOSE_LOGGING: bool = False           # ✅ Az log (performance için)
     
     # --- ✅ OPTIMIZE Memory Management ---
     MAX_KLINES_PER_SYMBOL: int = 100        # ✅ 100 mum yeterli EMA için
