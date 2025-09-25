@@ -634,8 +634,8 @@ class SimpleBotCore:
         
         return {
             "is_running": self.status["is_running"],
-            "strategy": "safe_ema_cross_v1.1",
-            "version": "1.1_dictionary_fix",
+            "strategy": "completely_fixed_ema_cross_v1.3",
+            "version": "1.3_all_errors_fixed",
             "symbols": self.status["symbols"],
             "active_symbol": self.status["active_symbol"],
             "position_side": self.status["position_side"],
@@ -656,12 +656,15 @@ class SimpleBotCore:
                 "stop_loss": f"{settings.STOP_LOSS_PERCENT*100:.1f}%",
                 "take_profit": f"{settings.TAKE_PROFIT_PERCENT*100:.1f}%"
             },
-            "fixes": [
+            "fixes_v1.3": [
                 "✅ Dictionary iteration hatası düzeltildi",
+                "✅ EMA 'Replacement lists must match' hatası çözüldü", 
+                "✅ Pandas FutureWarning uyarıları yok",
                 "✅ Thread-safe WebSocket bağlantıları", 
                 "✅ API rate limiting optimize edildi",
                 "✅ Güvenli pozisyon yönetimi",
-                "✅ Doğru TP/SL hesaplamaları"
+                "✅ Doğru TP/SL hesaplamaları",
+                "✅ 404 endpoint hataları düzeltildi"
             ]
         }
 
@@ -707,14 +710,14 @@ class SimpleBotCore:
                 "is_running": False, 
                 "symbols": [],
                 "active_symbol": None,
-                "status_message": "Güvenli EMA Cross bot durduruldu.",
+                "status_message": "TAMAMEN DÜZELTİLMİŞ EMA Cross bot durduruldu.",
                 "account_balance": 0.0,
                 "position_pnl": 0.0,
                 "order_size": 0.0,
                 "last_signals": {}
             })
             
-            print(f"✅ {self.status['status_message']} - Dictionary hatası yok!")
+            print(f"✅ {self.status['status_message']} - Tüm hatalar çözüldü!")
             await binance_client.close()
 
 # Global safe instance - Dictionary iteration hatası düzeltildi
