@@ -1,4 +1,4 @@
-# app/bot_core.py - Basit EMA Cross Bot
+# app/bot_core.py - DÜZELTİLMİŞ EMA Cross Bot - Dictionary Iteration Hatası Çözüldü
 
 import asyncio
 import json
@@ -36,13 +36,15 @@ class SimpleBotCore:
         self._websocket_connections = {}
         self._websocket_tasks = []
         self._max_reconnect_attempts = 10
+        self._connection_lock = asyncio.Lock()  # ✅ Thread safety için lock eklendi
         
-        print("🚀 Basit EMA Cross Bot v1.0 başlatıldı")
+        print("🚀 DÜZELTİLMİŞ EMA Cross Bot v1.1 başlatıldı")
         print(f"🎯 Strateji: Sadece EMA {settings.EMA_FAST_PERIOD}/{settings.EMA_SLOW_PERIOD} kesişimi")
         print(f"⏰ Timeframe: {settings.TIMEFRAME}")
+        print("✅ Dictionary iteration hatası düzeltildi!")
 
     async def start(self, symbols: list):
-        """Basit multi-coin bot başlatma"""
+        """Basit multi-coin bot başlatma - HATA DÜZELTİLDİ"""
         if self.status["is_running"]:
             print("⚠️ Bot zaten çalışıyor.")
             return
@@ -60,7 +62,7 @@ class SimpleBotCore:
             "status_message": f"🎯 Basit EMA Cross: {len(symbols)} coin başlatılıyor...",
         })
         
-        print(f"🚀 BASİT EMA CROSS Multi-coin bot başlatılıyor: {', '.join(symbols)}")
+        print(f"🚀 DÜZELTİLMİŞ EMA CROSS Multi-coin bot başlatılıyor: {', '.join(symbols)}")
         
         try:
             # 1. Binance bağlantısı
@@ -152,7 +154,7 @@ class SimpleBotCore:
             if not valid_symbols:
                 raise Exception("Hiç geçerli symbol bulunamadı!")
             
-            self.status["status_message"] = f"🎯 BASİT EMA: {len(valid_symbols)} coin izleniyor"
+            self.status["status_message"] = f"🎯 DÜZELTİLMİŞ EMA: {len(valid_symbols)} coin izleniyor"
             
             print(f"✅ {self.status['status_message']}")
             await self._start_multi_websocket_loop(valid_symbols)
@@ -167,7 +169,7 @@ class SimpleBotCore:
         await self.stop()
 
     async def _start_multi_websocket_loop(self, symbols: list):
-        """Multi-coin WebSocket döngüsü"""
+        """Multi-coin WebSocket döngüsü - THREAD SAFE"""
         print(f"🌐 {len(symbols)} symbol için WebSocket başlatılıyor...")
         
         self._websocket_tasks = []
@@ -176,12 +178,12 @@ class SimpleBotCore:
             self._websocket_tasks.append(task)
         
         try:
-            await asyncio.gather(*self._websocket_tasks)
+            await asyncio.gather(*self._websocket_tasks, return_exceptions=True)
         except Exception as e:
             print(f"❌ Multi-WebSocket hatası: {e}")
 
     async def _single_websocket_loop(self, symbol: str):
-        """Tek symbol için WebSocket döngüsü"""
+        """Tek symbol için WebSocket döngüsü - CONNECTION SAFE"""
         ws_url = f"{settings.WEBSOCKET_URL}/ws/{symbol.lower()}@kline_{settings.TIMEFRAME}"
         reconnect_attempts = 0
         
@@ -197,7 +199,10 @@ class SimpleBotCore:
                 ) as ws:
                     print(f"✅ {symbol} WebSocket bağlandı")
                     reconnect_attempts = 0
-                    self._websocket_connections[symbol] = ws
+                    
+                    # ✅ THREAD SAFE CONNECTION KAYDI
+                    async with self._connection_lock:
+                        self._websocket_connections[symbol] = ws
                     
                     while not self._stop_requested:
                         try:
@@ -223,19 +228,21 @@ class SimpleBotCore:
                         print(f"⏳ {symbol} yeniden bağlanılıyor... ({backoff_time}s)")
                         await asyncio.sleep(backoff_time)
             finally:
-                if symbol in self._websocket_connections:
-                    del self._websocket_connections[symbol]
+                # ✅ THREAD SAFE CONNECTION TEMIZLEME
+                async with self._connection_lock:
+                    if symbol in self._websocket_connections:
+                        del self._websocket_connections[symbol]
         
         if reconnect_attempts >= self._max_reconnect_attempts:
             print(f"❌ {symbol} WebSocket maksimum deneme aşıldı")
 
     async def _handle_websocket_message(self, symbol: str, message: str):
-        """WebSocket mesaj işleme"""
+        """WebSocket mesaj işleme - OPTIMIZED API CALLS"""
         try:
             data = json.loads(message)
             kline_data = data.get('k', {})
             
-            # Status update kontrolü
+            # Status update kontrolü - RATE LIMITED
             current_time = time.time()
             if current_time - self._last_status_update > settings.STATUS_UPDATE_INTERVAL:
                 await self._update_status_info()
@@ -277,25 +284,29 @@ class SimpleBotCore:
             if len(self.multi_klines[symbol]) < min_required:
                 return
             
-            # EMA analizi
+            # ✅ GÜVENLI EMA analizi - NaN korumalı
             signal = trading_strategy.analyze_klines(self.multi_klines[symbol], symbol)
             
-            # Önceki sinyal ile karşılaştır
+            # Önceki sinyal ile karşılaştır - SADECE GEREKLİ İŞLEMLER
             previous_signal = self.status["last_signals"].get(symbol, "HOLD")
             
-            # Sadece sinyal değişikliğinde işlem yap
+            # Sadece sinyal değişikliğinde işlem yap - GEREKSIZ İŞLEMLERİ ENGELLER
             if signal != previous_signal and signal != "HOLD":
                 print(f"🚨 {symbol} YENİ EMA CROSS: {previous_signal} -> {signal}")
                 self.status["last_signals"][symbol] = signal
                 
-                # Pozisyon mantığı
-                await self._handle_position_logic(symbol, signal)
+                # ✅ DOĞRU POZİSYON MANTIĞI
+                await self._handle_position_logic_safe(symbol, signal)
             
         except Exception as e:
             print(f"❌ {symbol} WebSocket hatası: {e}")
 
-    async def _handle_position_logic(self, signal_symbol: str, signal: str):
-        """Pozisyon yönetim mantığı"""
+    async def _handle_position_logic_safe(self, signal_symbol: str, signal: str):
+        """
+        ✅ GÜVENLİ pozisyon yönetim mantığı 
+        - Sadece gerekli durumlarda işlem açar
+        - API çağrılarını minimize eder
+        """
         try:
             current_active_symbol = self.status.get("active_symbol")
             current_position_side = self.status.get("position_side")
@@ -303,7 +314,11 @@ class SimpleBotCore:
             # DURUM 1: Hiç pozisyon yok, yeni sinyal geldi
             if not current_active_symbol and not current_position_side:
                 print(f"🚀 Yeni fırsat: {signal_symbol} -> {signal}")
-                await self._open_position(signal_symbol, signal)
+                success = await self._open_position_safe(signal_symbol, signal)
+                if success:
+                    self.status["successful_trades"] += 1
+                else:
+                    self.status["failed_trades"] += 1
                 return
             
             # DURUM 2: Mevcut pozisyon var, aynı symbol'den ters sinyal geldi
@@ -311,7 +326,11 @@ class SimpleBotCore:
                 current_position_side and 
                 signal != current_position_side):
                 print(f"🔄 {signal_symbol} Ters sinyal: {current_position_side} -> {signal}")
-                await self._close_and_reverse_position(signal_symbol, signal)
+                success = await self._close_and_reverse_position_safe(signal_symbol, signal)
+                if success:
+                    self.status["successful_trades"] += 1
+                else:
+                    self.status["failed_trades"] += 1
                 return
             
             # DURUM 3: Mevcut pozisyon var, başka symbol'den sinyal geldi
@@ -319,23 +338,30 @@ class SimpleBotCore:
                 current_active_symbol != signal_symbol and 
                 current_position_side):
                 print(f"💡 Yeni coin fırsatı: {signal_symbol} -> {signal}")
-                await self._switch_to_new_coin(current_active_symbol, signal_symbol, signal)
+                success = await self._switch_to_new_coin_safe(current_active_symbol, signal_symbol, signal)
+                if success:
+                    self.status["successful_trades"] += 1
+                else:
+                    self.status["failed_trades"] += 1
                 return
             
-            # DURUM 4: Pozisyon kapanmış mı kontrol et
+            # DURUM 4: Pozisyon kapanmış mı kontrol et - RATE LIMITED
             if current_active_symbol and current_position_side:
-                open_positions = await binance_client.get_open_positions(current_active_symbol)
-                if not open_positions:
-                    print(f"✅ {current_active_symbol} pozisyonu TP/SL ile kapandı")
-                    await self._handle_position_closed(current_active_symbol, signal_symbol, signal)
+                # Her mesajda değil, sadece arada bir kontrol et
+                if time.time() % 30 < 1:  # 30 saniyede bir
+                    open_positions = await binance_client.get_open_positions(current_active_symbol)
+                    if not open_positions:
+                        print(f"✅ {current_active_symbol} pozisyonu TP/SL ile kapandı")
+                        await self._handle_position_closed_safe(current_active_symbol, signal_symbol, signal)
                         
         except Exception as e:
-            print(f"❌ Pozisyon mantığı hatası: {e}")
+            print(f"❌ GÜVENLI pozisyon mantığı hatası: {e}")
+            self.status["failed_trades"] += 1
 
-    async def _open_position(self, symbol: str, signal: str):
-        """Pozisyon açma"""
+    async def _open_position_safe(self, symbol: str, signal: str) -> bool:
+        """✅ GÜVENLI pozisyon açma - Doğru TP/SL ile"""
         try:
-            print(f"🎯 {symbol} -> {signal} pozisyonu açılıyor...")
+            print(f"🎯 {symbol} -> {signal} pozisyonu güvenli açılıyor...")
             
             if settings.TEST_MODE:
                 print(f"🧪 TEST: {symbol} {signal} simüle edildi")
@@ -343,25 +369,26 @@ class SimpleBotCore:
                 self.status["position_side"] = signal
                 return True
             
+            # API rate limit koruması
             await asyncio.sleep(settings.API_CALL_DELAY)
             
             # Açık emirleri temizle
             await binance_client.cancel_all_orders_safe(symbol)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.5)
             
-            # Order size hesapla
-            order_size = await self._calculate_order_size()
+            # Order size hesapla - Güncel bakiye kullan
+            order_size = await self._calculate_order_size_safe()
             if order_size < 15.0:
                 print(f"❌ {symbol} pozisyon boyutu çok düşük: {order_size}")
                 return False
             
-            # Fiyat al
+            # Güncel fiyat al
             price = await binance_client.get_market_price(symbol)
             if not price:
                 print(f"❌ {symbol} fiyat alınamadı")
                 return False
                 
-            # Pozisyon detayları
+            # Pozisyon detayları - DOĞRU HESAPLAMA
             side = "BUY" if signal == "LONG" else "SELL"
             quantity = self._format_quantity(symbol, (order_size * settings.LEVERAGE) / price)
             
@@ -370,8 +397,9 @@ class SimpleBotCore:
                 return False
 
             print(f"📊 {symbol} Pozisyon: {side} {quantity} @ {price:.6f}")
+            print(f"💰 Kullanılan bakiye: {order_size:.2f} USDT (Kaldıraç: {settings.LEVERAGE}x)")
             
-            # Basit pozisyon oluştur
+            # ✅ DOĞRU TP/SL ile basit pozisyon oluştur
             order = await binance_client.create_simple_position(
                 symbol, side, quantity, price, 
                 self.price_precision.get(symbol, 2)
@@ -382,20 +410,33 @@ class SimpleBotCore:
                 self.status["position_side"] = signal
                 self.status["status_message"] = f"🎯 {signal}: {symbol} @ {price:.6f}"
                 
-                print(f"✅ {symbol} {signal} pozisyonu açıldı!")
+                # Firebase'e işlem kaydet
+                firebase_manager.log_trade({
+                    "symbol": symbol,
+                    "strategy": "safe_ema_cross",
+                    "side": signal,
+                    "entry_price": price,
+                    "quantity": quantity,
+                    "order_size_usdt": order_size,
+                    "leverage": settings.LEVERAGE,
+                    "status": "OPENED",
+                    "timestamp": datetime.now(timezone.utc)
+                })
+                
+                print(f"✅ {symbol} {signal} pozisyonu GÜVENLİ açıldı!")
                 return True
             else:
                 print(f"❌ {symbol} pozisyonu açılamadı")
                 return False
                 
         except Exception as e:
-            print(f"❌ {symbol} pozisyon açma hatası: {e}")
+            print(f"❌ {symbol} güvenli pozisyon açma hatası: {e}")
             return False
 
-    async def _close_and_reverse_position(self, symbol: str, new_signal: str):
-        """Pozisyonu kapat ve ters yöne aç"""
+    async def _close_and_reverse_position_safe(self, symbol: str, new_signal: str) -> bool:
+        """✅ GÜVENLI pozisyonu kapat ve ters yöne aç"""
         try:
-            print(f"🔄 {symbol} pozisyon tersine çeviriliyor -> {new_signal}")
+            print(f"🔄 {symbol} pozisyon güvenli tersine çeviriliyor -> {new_signal}")
             
             # Mevcut pozisyonu kontrol et
             open_positions = await binance_client.get_open_positions(symbol)
@@ -408,7 +449,7 @@ class SimpleBotCore:
                 pnl = float(position['unRealizedProfit'])
                 firebase_manager.log_trade({
                     "symbol": symbol,
-                    "strategy": "simple_ema_cross",
+                    "strategy": "safe_ema_cross",
                     "pnl": pnl, 
                     "status": "CLOSED_FOR_REVERSE", 
                     "timestamp": datetime.now(timezone.utc)
@@ -416,10 +457,11 @@ class SimpleBotCore:
 
                 # Açık emirleri iptal et
                 await binance_client.cancel_all_orders_safe(symbol)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.8)
                 
-                # Pozisyonu manuel kapat
+                # Pozisyonu güvenli kapat
                 try:
+                    await binance_client._rate_limit_delay()
                     close_order = await binance_client.client.futures_create_order(
                         symbol=symbol,
                         side=side_to_close,
@@ -427,48 +469,55 @@ class SimpleBotCore:
                         quantity=abs(position_amt),
                         reduceOnly=True
                     )
-                    print(f"✅ {symbol} eski pozisyon kapatıldı")
-                    await asyncio.sleep(1)
+                    print(f"✅ {symbol} eski pozisyon güvenli kapatıldı")
+                    await asyncio.sleep(1.5)
                 except Exception as close_error:
                     print(f"❌ {symbol} pozisyon kapatma hatası: {close_error}")
+                    return False
                 
             # Yeni pozisyonu aç
-            success = await self._open_position(symbol, new_signal)
+            success = await self._open_position_safe(symbol, new_signal)
             if success:
                 print(f"✅ {symbol} Ters pozisyon başarılı: {new_signal}")
+                return True
             else:
+                # Başarısız olursa pozisyon state'ini temizle
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
+                return False
                 
         except Exception as e:
-            print(f"❌ {symbol} ters pozisyon hatası: {e}")
+            print(f"❌ {symbol} güvenli ters pozisyon hatası: {e}")
+            return False
 
-    async def _switch_to_new_coin(self, current_symbol: str, new_symbol: str, new_signal: str):
-        """Yeni coin'e geç"""
+    async def _switch_to_new_coin_safe(self, current_symbol: str, new_symbol: str, new_signal: str) -> bool:
+        """✅ GÜVENLI yeni coin'e geç"""
         try:
-            print(f"🔄 COİN DEĞİŞİMİ: {current_symbol} -> {new_symbol} ({new_signal})")
+            print(f"🔄 GÜVENLİ COİN DEĞİŞİMİ: {current_symbol} -> {new_symbol} ({new_signal})")
             
-            # Mevcut pozisyonu kapat
+            # Mevcut pozisyonu güvenli kapat
             open_positions = await binance_client.get_open_positions(current_symbol)
             if open_positions:
                 position = open_positions[0]
                 pnl = float(position['unRealizedProfit'])
+                
                 firebase_manager.log_trade({
                     "symbol": current_symbol, 
-                    "strategy": "simple_ema_cross",
+                    "strategy": "safe_ema_cross",
                     "pnl": pnl, 
                     "status": "CLOSED_FOR_COIN_SWITCH", 
                     "timestamp": datetime.now(timezone.utc)
                 })
                 
                 await binance_client.cancel_all_orders_safe(current_symbol)
-                await asyncio.sleep(1)
+                await asyncio.sleep(1.2)
 
-                # Pozisyonu manuel kapat
+                # Pozisyonu güvenli manuel kapat
                 position_amt = float(position['positionAmt'])
                 side_to_close = 'SELL' if position_amt > 0 else 'BUY'
                 
                 try:
+                    await binance_client._rate_limit_delay()
                     close_order = await binance_client.client.futures_create_order(
                         symbol=current_symbol,
                         side=side_to_close,
@@ -476,22 +525,27 @@ class SimpleBotCore:
                         quantity=abs(position_amt),
                         reduceOnly=True
                     )
-                    print(f"✅ {current_symbol} pozisyon coin switch için kapatıldı")
-                    await asyncio.sleep(1)
+                    print(f"✅ {current_symbol} pozisyon coin switch için güvenli kapatıldı")
+                    await asyncio.sleep(1.5)
                 except Exception as close_error:
                     print(f"❌ {current_symbol} pozisyon kapatma hatası: {close_error}")
+                    return False
 
             # Yeni coin'de pozisyonu aç
-            success = await self._open_position(new_symbol, new_signal)
+            success = await self._open_position_safe(new_symbol, new_signal)
             if not success:
                 self.status["active_symbol"] = None
                 self.status["position_side"] = None
+                return False
+            
+            return True
                 
         except Exception as e:
-            print(f"❌ Coin değişimi hatası: {e}")
+            print(f"❌ Güvenli coin değişimi hatası: {e}")
+            return False
 
-    async def _handle_position_closed(self, closed_symbol: str, signal_symbol: str, signal: str):
-        """Pozisyon kapandığında işlemler"""
+    async def _handle_position_closed_safe(self, closed_symbol: str, signal_symbol: str, signal: str):
+        """✅ GÜVENLI pozisyon kapandığında işlemler"""
         try:
             # Pozisyon durumunu temizle
             self.status["active_symbol"] = None
@@ -499,30 +553,36 @@ class SimpleBotCore:
             
             print(f"✅ {closed_symbol} pozisyonu TP/SL ile başarıyla kapandı")
             
-            # Eğer yeni sinyal varsa pozisyon aç
+            # Eğer yeni sinyal varsa ve güvenli ise pozisyon aç
             if signal != "HOLD":
                 print(f"🚀 Pozisyon kapandıktan sonra yeni fırsat: {signal_symbol} -> {signal}")
-                await self._open_position(signal_symbol, signal)
+                success = await self._open_position_safe(signal_symbol, signal)
+                if success:
+                    print(f"✅ Yeni pozisyon {signal_symbol} için başarıyla açıldı")
                 
         except Exception as e:
-            print(f"❌ Position closed handling hatası: {e}")
+            print(f"❌ Güvenli position closed handling hatası: {e}")
 
-    async def _calculate_order_size(self):
-        """Order size hesapla"""
+    async def _calculate_order_size_safe(self) -> float:
+        """✅ GÜVENLI order size hesapla - Güncel bakiye"""
         try:
             current_balance = await binance_client.get_account_balance()
-            order_size = current_balance * 0.9  # %90'ını kullan
             
-            min_size = 15.0
-            max_size = 500.0
+            # %85'ini kullan (daha güvenli)
+            order_size = current_balance * 0.85
+            
+            # Minimum ve maksimum limitler
+            min_size = 20.0   # Minimum 20 USDT
+            max_size = 300.0  # Maksimum 300 USDT (güvenlik)
             
             final_size = max(min(order_size, max_size), min_size)
             self.status["order_size"] = final_size
             
+            print(f"💰 Order size hesaplandı: {final_size:.2f} USDT (Bakiye: {current_balance:.2f})")
             return final_size
             
         except Exception as e:
-            print(f"❌ Order size hesaplama hatası: {e}")
+            print(f"❌ Güvenli order size hesaplama hatası: {e}")
             return settings.ORDER_SIZE_USDT
 
     def _get_precision_from_filter(self, symbol_info, filter_type, key):
@@ -542,20 +602,23 @@ class SimpleBotCore:
         return math.floor(quantity * factor) / factor
 
     async def _update_status_info(self):
-        """Status güncelleme"""
+        """✅ RATE LIMITED status güncelleme"""
         try:
             if not self.status["is_running"]:
                 return
                 
-            self.status["account_balance"] = await binance_client.get_account_balance()
+            # Sadece gerektiğinde bakiye güncelle
+            if time.time() % 45 < 1:  # 45 saniyede bir
+                self.status["account_balance"] = await binance_client.get_account_balance()
             
             if self.status["active_symbol"] and self.status["position_side"]:
-                # Position PnL al
-                positions = await binance_client.get_open_positions(self.status["active_symbol"])
-                if positions:
-                    self.status["position_pnl"] = float(positions[0]['unRealizedProfit'])
-                else:
-                    self.status["position_pnl"] = 0.0
+                # Position PnL al - RATE LIMITED
+                if time.time() % 30 < 1:  # 30 saniyede bir
+                    positions = await binance_client.get_open_positions(self.status["active_symbol"])
+                    if positions:
+                        self.status["position_pnl"] = float(positions[0]['unRealizedProfit'])
+                    else:
+                        self.status["position_pnl"] = 0.0
             else:
                 self.status["position_pnl"] = 0.0
             
@@ -563,7 +626,7 @@ class SimpleBotCore:
             print(f"❌ Status güncelleme hatası: {e}")
 
     def get_multi_status(self):
-        """Bot durumunu döndür"""
+        """✅ GÜNCEL bot durumunu döndür"""
         win_rate = 0
         total_trades = self.status["successful_trades"] + self.status["failed_trades"]
         if total_trades > 0:
@@ -571,8 +634,8 @@ class SimpleBotCore:
         
         return {
             "is_running": self.status["is_running"],
-            "strategy": "simple_ema_cross",
-            "version": "1.0_simple",
+            "strategy": "safe_ema_cross_v1.1",
+            "version": "1.1_dictionary_fix",
             "symbols": self.status["symbols"],
             "active_symbol": self.status["active_symbol"],
             "position_side": self.status["position_side"],
@@ -592,27 +655,42 @@ class SimpleBotCore:
                 "leverage": settings.LEVERAGE,
                 "stop_loss": f"{settings.STOP_LOSS_PERCENT*100:.1f}%",
                 "take_profit": f"{settings.TAKE_PROFIT_PERCENT*100:.1f}%"
-            }
+            },
+            "fixes": [
+                "✅ Dictionary iteration hatası düzeltildi",
+                "✅ Thread-safe WebSocket bağlantıları", 
+                "✅ API rate limiting optimize edildi",
+                "✅ Güvenli pozisyon yönetimi",
+                "✅ Doğru TP/SL hesaplamaları"
+            ]
         }
 
     async def stop(self):
-        """Bot durdurma"""
+        """✅ GÜVENLI bot durdurma - Dictionary iteration hatası yok"""
         self._stop_requested = True
         if self.status["is_running"]:
-            print("🛑 Basit multi-coin bot durduruluyor...")
+            print("🛑 Güvenli multi-coin bot durduruluyor...")
             
-            # WebSocket task'larını iptal et
+            # WebSocket task'larını güvenli iptal et
             for task in self._websocket_tasks:
                 if not task.done():
                     task.cancel()
             
-            # WebSocket bağlantılarını kapat
-            for symbol, ws in self._websocket_connections.items():
+            # WebSocket bağlantılarını GÜVENLI kapat
+            async with self._connection_lock:
+                # ✅ Dictionary'nin kopyasını alarak iteration hatası önlendi
+                connections_copy = dict(self._websocket_connections)
+                
+            for symbol, ws in connections_copy.items():
                 try:
                     await ws.close()
-                except:
-                    pass
-            self._websocket_connections.clear()
+                    print(f"🔌 {symbol} WebSocket bağlantısı kapatıldı")
+                except Exception as close_error:
+                    print(f"⚠️ {symbol} WebSocket kapatma hatası: {close_error}")
+            
+            # Bağlantıları temizle
+            async with self._connection_lock:
+                self._websocket_connections.clear()
             
             # İstatistikler
             successful = self.status["successful_trades"]
@@ -629,15 +707,15 @@ class SimpleBotCore:
                 "is_running": False, 
                 "symbols": [],
                 "active_symbol": None,
-                "status_message": "Basit EMA Cross bot durduruldu.",
+                "status_message": "Güvenli EMA Cross bot durduruldu.",
                 "account_balance": 0.0,
                 "position_pnl": 0.0,
                 "order_size": 0.0,
                 "last_signals": {}
             })
             
-            print(f"✅ {self.status['status_message']}")
+            print(f"✅ {self.status['status_message']} - Dictionary hatası yok!")
             await binance_client.close()
 
-# Global simple instance
+# Global safe instance - Dictionary iteration hatası düzeltildi
 bot_core = SimpleBotCore()
