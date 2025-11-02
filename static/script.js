@@ -886,6 +886,224 @@ auth.onAuthStateChanged(user => {
 });
 
 console.log('✅ Gemini AI UI fonksiyonları yüklendi!');
+
+// ============ AUTONOMOUS AI TRADING UI ============
+
+const aiTradingStart = document.getElementById('ai-trading-start');
+const aiTradingStop = document.getElementById('ai-trading-stop');
+const aiTradingRefresh = document.getElementById('ai-trading-refresh');
+const aiTradingStatus = document.getElementById('ai-trading-status');
+const aiActivePositions = document.getElementById('ai-active-positions');
+const aiTotalTrades = document.getElementById('ai-total-trades');
+const aiWinRate = document.getElementById('ai-win-rate');
+const aiPositionsList = document.getElementById('ai-positions-list');
+const aiPositionsContainer = document.getElementById('ai-positions-container');
+
+let aiStatusInterval = null;
+
+async function startAITrading() {
+    if (!confirm('Otonom AI Trading baslatilsin mi? AI tum kararlari verecek.')) {
+        return;
+    }
+
+    aiTradingStart.disabled = true;
+    aiTradingStart.textContent = 'Baslatiyor...';
+
+    try {
+        const result = await fetchApi('/api/ai-trading/start', {
+            method: 'POST'
+        });
+
+        if (result && result.success) {
+            showSuccess(result.message);
+            updateAITradingUI(result.status);
+
+            aiTradingStart.disabled = true;
+            aiTradingStop.disabled = false;
+
+            startAIStatusUpdates();
+        }
+    } catch (error) {
+        showError('AI Trading baslatilamadi: ' + error.message);
+    } finally {
+        aiTradingStart.disabled = false;
+        aiTradingStart.textContent = '🚀 AI Trading Baslat';
+    }
+}
+
+async function stopAITrading() {
+    if (!confirm('AI Trading durdurulsun mu?')) {
+        return;
+    }
+
+    aiTradingStop.disabled = true;
+    aiTradingStop.textContent = 'Durduruluyor...';
+
+    try {
+        const result = await fetchApi('/api/ai-trading/stop', {
+            method: 'POST'
+        });
+
+        if (result && result.success) {
+            showSuccess(result.message);
+            updateAITradingUI(result.status);
+
+            aiTradingStart.disabled = false;
+            aiTradingStop.disabled = true;
+
+            stopAIStatusUpdates();
+        }
+    } catch (error) {
+        showError('AI Trading durdurulamadi: ' + error.message);
+    } finally {
+        aiTradingStop.disabled = false;
+        aiTradingStop.textContent = '🛑 AI Trading Durdur';
+    }
+}
+
+async function refreshAIStatus() {
+    aiTradingRefresh.disabled = true;
+    aiTradingRefresh.textContent = 'Yenileniyor...';
+
+    try {
+        const result = await fetchApi('/api/ai-trading/status');
+
+        if (result && result.success) {
+            updateAITradingUI(result.status, result.position_details);
+        }
+    } catch (error) {
+        showError('AI status yenilenemedi: ' + error.message);
+    } finally {
+        aiTradingRefresh.disabled = false;
+        aiTradingRefresh.textContent = '🔄 Durum Yenile';
+    }
+}
+
+function updateAITradingUI(status, positionDetails = []) {
+    if (!status) return;
+
+    if (aiTradingStatus) {
+        aiTradingStatus.textContent = status.is_running ? 'Calisiyor' : 'Durdurulmus';
+        aiTradingStatus.className = status.is_running ? 'status-running' : 'status-stopped';
+    }
+
+    if (aiActivePositions) {
+        aiActivePositions.textContent = status.active_positions || 0;
+    }
+
+    if (aiTotalTrades) {
+        aiTotalTrades.textContent = status.total_trades || 0;
+    }
+
+    if (aiWinRate) {
+        aiWinRate.textContent = status.win_rate || '-%';
+    }
+
+    aiTradingStart.disabled = status.is_running;
+    aiTradingStop.disabled = !status.is_running;
+
+    if (positionDetails && positionDetails.length > 0 && aiPositionsList) {
+        aiPositionsList.style.display = 'block';
+
+        if (aiPositionsContainer) {
+            aiPositionsContainer.innerHTML = '';
+
+            positionDetails.forEach(pos => {
+                const posDiv = document.createElement('div');
+                posDiv.className = 'position-card';
+
+                const pnlClass = pos.pnl_percent > 0 ? 'pnl-positive' : 'pnl-negative';
+
+                posDiv.innerHTML = `
+                    <div class="position-header">
+                        <span class="position-symbol">${pos.symbol}</span>
+                        <span class="position-side ${pos.side.toLowerCase()}">${pos.side}</span>
+                    </div>
+                    <div class="position-details">
+                        <div class="detail-row">
+                            <span>Entry:</span>
+                            <span>$${pos.entry_price.toFixed(4)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Current:</span>
+                            <span>$${pos.current_price.toFixed(4)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>PnL:</span>
+                            <span class="${pnlClass}">${pos.pnl_percent > 0 ? '+' : ''}${pos.pnl_percent}%</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>TP:</span>
+                            <span>$${pos.tp ? pos.tp.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>SL:</span>
+                            <span>$${pos.sl ? pos.sl.toFixed(4) : 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>AI Confidence:</span>
+                            <span>${pos.confidence}%</span>
+                        </div>
+                    </div>
+                `;
+
+                aiPositionsContainer.appendChild(posDiv);
+            });
+        }
+    } else if (aiPositionsList) {
+        aiPositionsList.style.display = 'none';
+    }
+}
+
+function startAIStatusUpdates() {
+    stopAIStatusUpdates();
+
+    const updateStatus = async () => {
+        try {
+            const result = await fetchApi('/api/ai-trading/status');
+            if (result && result.success) {
+                updateAITradingUI(result.status, result.position_details);
+            }
+        } catch (error) {
+            console.error('AI status update error:', error);
+        }
+    };
+
+    updateStatus();
+    aiStatusInterval = setInterval(updateStatus, 30000);
+}
+
+function stopAIStatusUpdates() {
+    if (aiStatusInterval) {
+        clearInterval(aiStatusInterval);
+        aiStatusInterval = null;
+    }
+}
+
+if (aiTradingStart) {
+    aiTradingStart.addEventListener('click', startAITrading);
+}
+
+if (aiTradingStop) {
+    aiTradingStop.addEventListener('click', stopAITrading);
+}
+
+if (aiTradingRefresh) {
+    aiTradingRefresh.addEventListener('click', refreshAIStatus);
+}
+
+auth.onAuthStateChanged(user => {
+    if (user) {
+        setTimeout(() => {
+            refreshAIStatus();
+        }, 3000);
+    } else {
+        stopAIStatusUpdates();
+    }
+});
+
+console.log('✅ Autonomous AI Trading UI yuklendi!');
+
     // Debug için Enter tuşu desteği
     if (debugSymbolInput) {
         debugSymbolInput.addEventListener('keypress', (e) => {
