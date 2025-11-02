@@ -870,7 +870,342 @@ async def get_bot_statistics(user: dict = Depends(authenticate_optimized)):
         return JSONResponse({"error": f"İstatistik hatası: {e}"}, status_code=500)
 
 # ============ ✅ OPTIMIZE HATA YÖNETİMİ ============
+# app/main.py dosyanızın EN SONUNA (diğer endpoint'lerden sonra) ekleyin
 
+# ============ 🤖 GEMİNİ AI TEST ENDPOINTS ============
+
+@app.post("/api/test-gemini")
+async def test_gemini_ai(
+    request: SymbolRequest, 
+    user: dict = Depends(authenticate_optimized)
+):
+    """
+    🤖 Gemini AI'yi test et
+    Mevcut botunuzla uyumlu çalışır, 1m ve 5m verilerle analiz yapar
+    """
+    try:
+        from .gemini_analyzer import gemini_analyzer
+        
+        symbol = request.symbol.upper().strip()
+        if not symbol.endswith('USDT'):
+            symbol += 'USDT'
+        
+        user_email = user.get('email', 'anonymous')
+        print(f"🤖 {user_email} Gemini AI test ediyor: {symbol}")
+        
+        # Gemini aktif mi kontrol
+        if not gemini_analyzer.enabled:
+            return JSONResponse({
+                "success": False,
+                "message": "❌ Gemini AI aktif değil. .env dosyasına GEMINI_API_KEY ekleyin.",
+                "help": "https://makersuite.google.com/app/apikey adresinden ücretsiz API key alabilirsiniz.",
+                "ai_enabled": False
+            })
+        
+        # Binance'den veri al
+        if not binance_client.client:
+            await binance_client.initialize()
+        
+        current_price = await binance_client.get_market_price(symbol)
+        if not current_price:
+            raise HTTPException(status_code=404, detail=f"{symbol} fiyat alınamadı")
+        
+        # 1m ve 5m veri al (Gemini scalping stratejisi için)
+        print(f"📊 {symbol} için 1m ve 5m verileri alınıyor...")
+        klines_1m = await binance_client.get_historical_klines(symbol, "1m", limit=100)
+        klines_5m = await binance_client.get_historical_klines(symbol, "5m", limit=50)
+        
+        if not klines_1m or len(klines_1m) < 20:
+            raise HTTPException(status_code=404, detail=f"{symbol} 1m veri yetersiz")
+        
+        if not klines_5m or len(klines_5m) < 10:
+            raise HTTPException(status_code=404, detail=f"{symbol} 5m veri yetersiz")
+        
+        # Gemini AI analizi
+        print(f"🤖 Gemini AI analiz başlatılıyor: {symbol}")
+        
+        analysis = await gemini_analyzer.analyze_scalping_opportunity(
+            symbol=symbol,
+            current_price=current_price,
+            klines_1m=klines_1m,
+            klines_5m=klines_5m,
+            ema_signal="TEST",  # Test modu
+            volume_data={"is_valid": True, "ratio": 1.5, "current_volume": 1000, "avg_volume": 800}
+        )
+        
+        # Sonuçları formatla
+        result_message = f"✅ Gemini AI Analizi Tamamlandı"
+        if analysis['should_trade']:
+            result_message = f"🚀 {analysis['signal']} Sinyali (Güven: %{analysis['confidence']:.0f})"
+        else:
+            result_message = f"⏸️ İşlem Önerilmiyor: {analysis['reasoning']}"
+        
+        return JSONResponse({
+            "success": True,
+            "symbol": symbol,
+            "current_price": current_price,
+            "ai_analysis": {
+                "signal": analysis['signal'],
+                "should_trade": analysis['should_trade'],
+                "confidence": analysis['confidence'],
+                "reasoning": analysis['reasoning'],
+                "stop_loss_percent": analysis['stop_loss_percent'],
+                "take_profit_percent": analysis['take_profit_percent'],
+                "risk_score": analysis['risk_score'],
+                "ai_validated": analysis.get('ai_validated', False)
+            },
+            "data_info": {
+                "klines_1m_count": len(klines_1m),
+                "klines_5m_count": len(klines_5m),
+                "timeframe_primary": "1m",
+                "timeframe_secondary": "5m"
+            },
+            "ai_enabled": True,
+            "message": result_message,
+            "user": user_email,
+            "timestamp": time.time()
+        })
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Gemini test hatası: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "ai_enabled": False,
+            "message": "Gemini AI test hatası"
+        }, status_code=500)
+
+@app.get("/api/gemini-status")
+async def get_gemini_status(user: dict = Depends(authenticate_optimized)):
+    """🤖 Gemini AI durum kontrolü"""
+    try:
+        from .gemini_analyzer import gemini_analyzer
+        
+        status = {
+            "ai_enabled": gemini_analyzer.enabled,
+            "api_key_configured": bool(gemini_analyzer.api_key) if gemini_analyzer.enabled else False,
+            "provider": "Gemini 2.0 Flash",
+            "model": "gemini-2.0-flash-exp",
+            "cache_size": len(gemini_analyzer.cache) if gemini_analyzer.enabled else 0,
+            "cache_duration_seconds": gemini_analyzer.cache_duration if gemini_analyzer.enabled else 0
+        }
+        
+        if not gemini_analyzer.enabled:
+            status["message"] = "❌ GEMINI_API_KEY ayarlanmamış"
+            status["help"] = "https://makersuite.google.com/app/apikey adresinden ücretsiz API key alın"
+            status["setup_steps"] = [
+                "1. Google AI Studio'ya giriş yapın",
+                "2. 'Create API Key' butonuna tıklayın",
+                "3. API key'i kopyalayın",
+                "4. .env dosyasına GEMINI_API_KEY=your_key_here ekleyin",
+                "5. Uygulamayı yeniden başlatın"
+            ]
+        else:
+            status["message"] = "✅ Gemini AI aktif ve hazır"
+            status["api_key_preview"] = gemini_analyzer.api_key[:10] + "..." if gemini_analyzer.api_key else None
+            status["features"] = [
+                "✅ 1m + 5m multi-timeframe analiz",
+                "✅ AI güven skoru hesaplama",
+                "✅ Risk değerlendirmesi",
+                "✅ Otomatik TP/SL önerisi",
+                "✅ Volume ve volatilite analizi"
+            ]
+        
+        return JSONResponse({
+            "success": True,
+            "status": status,
+            "user": user.get('email', 'anonymous'),
+            "timestamp": time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ Gemini status hatası: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "ai_enabled": False
+        }, status_code=500)
+
+@app.post("/api/gemini-clear-cache")
+async def clear_gemini_cache(user: dict = Depends(authenticate_optimized)):
+    """🧹 Gemini AI cache temizle"""
+    try:
+        from .gemini_analyzer import gemini_analyzer
+        
+        if not gemini_analyzer.enabled:
+            return JSONResponse({
+                "success": False,
+                "message": "Gemini AI aktif değil"
+            })
+        
+        old_cache_size = len(gemini_analyzer.cache)
+        gemini_analyzer.clear_cache()
+        
+        user_email = user.get('email', 'anonymous')
+        print(f"🧹 {user_email} Gemini cache temizledi ({old_cache_size} kayıt)")
+        
+        return JSONResponse({
+            "success": True,
+            "message": f"✅ Cache temizlendi ({old_cache_size} kayıt silindi)",
+            "cleared_count": old_cache_size,
+            "user": user_email,
+            "timestamp": time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ Cache temizleme hatası: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+@app.get("/api/gemini-health")
+async def gemini_health_check():
+    """🤖 Gemini AI sağlık kontrolü (auth gerekmiyor)"""
+    try:
+        from .gemini_analyzer import gemini_analyzer
+        
+        health_status = {
+            "service": "Gemini AI Analyzer",
+            "version": "1.0",
+            "status": "healthy" if gemini_analyzer.enabled else "disabled",
+            "timestamp": time.time()
+        }
+        
+        if gemini_analyzer.enabled:
+            health_status.update({
+                "provider": "Gemini 2.0 Flash",
+                "cache_enabled": True,
+                "cache_size": len(gemini_analyzer.cache),
+                "features_available": [
+                    "Scalping opportunity analysis",
+                    "Multi-timeframe analysis",
+                    "Risk scoring",
+                    "Confidence calculation"
+                ]
+            })
+        else:
+            health_status.update({
+                "reason": "API key not configured",
+                "help_url": "https://makersuite.google.com/app/apikey"
+            })
+        
+        return JSONResponse(health_status)
+        
+    except Exception as e:
+        return JSONResponse({
+            "service": "Gemini AI Analyzer",
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": time.time()
+        }, status_code=503)
+
+# ============ 🎯 GEMİNİ + MEVCUT BOT ENTEGRASYONU ============
+
+@app.post("/api/analyze-with-ai")
+async def analyze_symbol_with_ai(
+    request: SymbolRequest,
+    user: dict = Depends(authenticate_optimized)
+):
+    """
+    🤖 Bir sembolü hem EMA hem de Gemini AI ile analiz et
+    Mevcut botunuzun EMA stratejisi + Gemini AI önerisini karşılaştırır
+    """
+    try:
+        from .gemini_analyzer import gemini_analyzer
+        from .trading_strategy import trading_strategy
+        
+        symbol = request.symbol.upper().strip()
+        if not symbol.endswith('USDT'):
+            symbol += 'USDT'
+        
+        user_email = user.get('email', 'anonymous')
+        print(f"🔍 {user_email} kombine analiz: {symbol}")
+        
+        # Binance bağlantısı
+        if not binance_client.client:
+            await binance_client.initialize()
+        
+        # Veri toplama
+        current_price = await binance_client.get_market_price(symbol)
+        klines_15m = await binance_client.get_historical_klines(symbol, "15m", limit=100)
+        klines_1m = await binance_client.get_historical_klines(symbol, "1m", limit=100)
+        klines_5m = await binance_client.get_historical_klines(symbol, "5m", limit=50)
+        
+        # 1. Mevcut EMA stratejisi analizi (15m)
+        ema_signal = "HOLD"
+        if klines_15m and len(klines_15m) >= 30:
+            ema_signal = trading_strategy.analyze_klines(klines_15m, symbol)
+        
+        # 2. Gemini AI analizi (1m+5m)
+        ai_analysis = None
+        if gemini_analyzer.enabled and klines_1m and klines_5m:
+            ai_analysis = await gemini_analyzer.analyze_scalping_opportunity(
+                symbol=symbol,
+                current_price=current_price,
+                klines_1m=klines_1m,
+                klines_5m=klines_5m,
+                ema_signal=ema_signal,
+                volume_data={"is_valid": True, "ratio": 1.5}
+            )
+        
+        # 3. Karşılaştırma
+        comparison = {
+            "ema_15m_signal": ema_signal,
+            "ai_1m5m_signal": ai_analysis['signal'] if ai_analysis else "N/A",
+            "signals_agree": False,
+            "recommendation": "HOLD"
+        }
+        
+        if ai_analysis:
+            signals_agree = (ema_signal == ai_analysis['signal']) and (ema_signal != "HOLD")
+            comparison["signals_agree"] = signals_agree
+            
+            if signals_agree and ai_analysis['should_trade']:
+                comparison["recommendation"] = ema_signal
+                comparison["confidence"] = "HIGH"
+                comparison["reason"] = "Hem EMA hem AI aynı yönde"
+            elif ai_analysis['should_trade'] and ema_signal == "HOLD":
+                comparison["recommendation"] = ai_analysis['signal']
+                comparison["confidence"] = "MEDIUM"
+                comparison["reason"] = "Sadece AI öneriyor (scalping fırsatı)"
+            elif not ai_analysis['should_trade']:
+                comparison["recommendation"] = "HOLD"
+                comparison["confidence"] = "LOW"
+                comparison["reason"] = ai_analysis['reasoning']
+        
+        return JSONResponse({
+            "success": True,
+            "symbol": symbol,
+            "current_price": current_price,
+            "analysis": {
+                "ema_strategy": {
+                    "timeframe": "15m",
+                    "signal": ema_signal,
+                    "strategy": "EMA 9/21 Cross"
+                },
+                "ai_strategy": ai_analysis if ai_analysis else {"error": "Gemini AI devre dışı"},
+                "comparison": comparison
+            },
+            "user": user_email,
+            "timestamp": time.time()
+        })
+        
+    except Exception as e:
+        print(f"❌ Kombine analiz hatası: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e)
+        }, status_code=500)
+
+print("✅ Gemini AI endpoints yüklendi!")
+print("🤖 Test için: POST /api/test-gemini {'symbol': 'BTC'}")
+print("📊 Durum için: GET /api/gemini-status")
+print("🔍 Kombine analiz: POST /api/analyze-with-ai {'symbol': 'BTC'}")
 @app.exception_handler(Exception)
 async def exception_handler_optimized(request, exc):
     """✅ TAMAMEN DÜZELTİLMİŞ Global exception handler"""
