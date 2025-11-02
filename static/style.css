@@ -517,3 +517,120 @@ input:focus {
         max-height: 300px;
     }
 }
+
+/* ============ AUTONOMOUS AI TRADING STYLES ============ */
+
+.ai-trading-card {
+    border-color: var(--success-color);
+    box-shadow: 0 0 15px rgba(46, 160, 67, 0.3);
+    background: linear-gradient(135deg, var(--card-bg-color) 0%, rgba(46, 160, 67, 0.05) 100%);
+}
+
+.ai-trading-card h2 {
+    color: var(--success-color);
+    border-bottom-color: var(--success-color);
+}
+
+.ai-trading-status {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.ai-trading-status p {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.ai-info {
+    margin-top: 1.5rem;
+}
+
+.ai-info h3 {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-muted-color);
+}
+
+.positions-list {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.positions-list h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--success-color);
+}
+
+.position-card {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s;
+}
+
+.position-card:hover {
+    border-color: var(--success-color);
+    box-shadow: 0 0 10px rgba(46, 160, 67, 0.2);
+}
+
+.position-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.position-symbol {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+.position-side {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.position-side.long {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.position-side.short {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.position-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.detail-row span:first-child {
+    color: var(--text-muted-color);
+}
+
+.detail-row span:last-child {
+    font-weight: 600;
+    color: var(--text-color);
+}
