@@ -32,12 +32,12 @@ class OptimizedSettings:
 
     # --- OPTIMIZE EDİLMİŞ İşlem Parametreleri ---
     LEVERAGE: int = 10                      # ✅ Güvenli 10x kaldıraç
-    ORDER_SIZE_USDT: float = 50.0          # ✅ 50 USDT başlangıç boyutu
-    TIMEFRAME: str = "15m"                 # ✅ 15m optimal timeframe
+    ORDER_SIZE_USDT: float = 80.0          # ✅ 50 USDT başlangıç boyutu
+    TIMEFRAME: str = "1m"                 # ✅ 15m optimal timeframe
     
     # --- GÜVENLİ TP/SL Ayarları ---
-    STOP_LOSS_PERCENT: float = 0.008       # ✅ %0.8 stop loss (güvenli)
-    TAKE_PROFIT_PERCENT: float = 0.015     # ✅ %1.5 take profit (optimize)
+    STOP_LOSS_PERCENT: float = 0.002       # ✅ %0.8 stop loss (güvenli)
+    TAKE_PROFIT_PERCENT: float = 0.005     # ✅ %1.5 take profit (optimize)
     
     # --- OPTIMIZE EMA Parametreleri ---
     EMA_FAST_PERIOD: int = 9               # ✅ Hızlı EMA
