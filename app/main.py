@@ -14,6 +14,7 @@ from .firebase_manager import firebase_manager
 from .position_manager import position_manager
 from .binance_client import binance_client
 from .trading_strategy import trading_strategy
+from .gemini_trading_manager import gemini_trading_manager
 
 bearer_scheme = HTTPBearer()
 
@@ -48,6 +49,8 @@ async def shutdown_event():
             await bot_core.stop()
         if position_manager.is_running:
             await position_manager.stop_monitoring()
+        if gemini_trading_manager.is_running:
+            await gemini_trading_manager.stop_autonomous_trading()
         await binance_client.close()
         print("✅ Tüm bileşenler güvenli kapatıldı")
     except Exception as e:
@@ -1206,6 +1209,132 @@ print("✅ Gemini AI endpoints yüklendi!")
 print("🤖 Test için: POST /api/test-gemini {'symbol': 'BTC'}")
 print("📊 Durum için: GET /api/gemini-status")
 print("🔍 Kombine analiz: POST /api/analyze-with-ai {'symbol': 'BTC'}")
+
+# ============ AUTONOMOUS AI TRADING ENDPOINTS ============
+
+@app.post("/api/ai-trading/start")
+async def start_ai_trading(
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(authenticate_optimized)
+):
+    """
+    Start Autonomous AI Trading
+    Gemini AI tum kararlari verir, siz sadece izlersiniz
+    """
+    try:
+        if not gemini_trading_manager.enabled:
+            raise HTTPException(
+                status_code=400,
+                detail="Gemini API aktif degil. GEMINI_API_KEY kontrolu edin."
+            )
+
+        if gemini_trading_manager.is_running:
+            raise HTTPException(status_code=400, detail="AI Trading zaten calisiyor.")
+
+        user_email = user.get('email', 'anonymous')
+        print(f"AI Trading baslatiyor: {user_email}")
+
+        # Binance baglantisini kontrol et
+        if not binance_client.client:
+            await binance_client.initialize()
+
+        # Background task olarak basla
+        background_tasks.add_task(gemini_trading_manager.start_autonomous_trading)
+
+        await asyncio.sleep(2)
+
+        return JSONResponse({
+            "success": True,
+            "message": "Autonomous AI Trading baslatildi",
+            "status": gemini_trading_manager.get_status(),
+            "user": user_email,
+            "timestamp": time.time(),
+            "info": {
+                "strategy": "Gemini AI Autonomous Scalping",
+                "timeframes": ["1m", "15m"],
+                "max_positions": gemini_trading_manager.max_positions,
+                "capital_per_position": f"{gemini_trading_manager.capital_per_position*100}%",
+                "min_confidence": gemini_trading_manager.min_confidence
+            }
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"AI Trading start error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ai-trading/stop")
+async def stop_ai_trading(user: dict = Depends(authenticate_optimized)):
+    """Stop Autonomous AI Trading"""
+    try:
+        if not gemini_trading_manager.is_running:
+            raise HTTPException(status_code=400, detail="AI Trading zaten durmus.")
+
+        user_email = user.get('email', 'anonymous')
+        print(f"AI Trading durduruluyor: {user_email}")
+
+        await gemini_trading_manager.stop_autonomous_trading()
+
+        return JSONResponse({
+            "success": True,
+            "message": "Autonomous AI Trading durduruldu",
+            "status": gemini_trading_manager.get_status(),
+            "user": user_email,
+            "timestamp": time.time()
+        })
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"AI Trading stop error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ai-trading/status")
+async def get_ai_trading_status(user: dict = Depends(authenticate_optimized)):
+    """Get AI Trading Manager status"""
+    try:
+        status = gemini_trading_manager.get_status()
+
+        # Aktif pozisyonlarin detaylarini ekle
+        position_details = []
+        for symbol, pos_data in gemini_trading_manager.active_positions.items():
+            try:
+                current_price = await binance_client.get_market_price(symbol)
+                if current_price:
+                    entry_price = pos_data['entry_price']
+                    pnl_pct = ((current_price - entry_price) / entry_price * 100) if pos_data['side'] == 'LONG' else ((entry_price - current_price) / entry_price * 100)
+
+                    position_details.append({
+                        'symbol': symbol,
+                        'side': pos_data['side'],
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'pnl_percent': round(pnl_pct, 2),
+                        'tp': pos_data.get('tp'),
+                        'sl': pos_data.get('sl'),
+                        'confidence': pos_data.get('ai_confidence', 0)
+                    })
+            except:
+                pass
+
+        return JSONResponse({
+            "success": True,
+            "status": status,
+            "position_details": position_details,
+            "timestamp": time.time()
+        })
+
+    except Exception as e:
+        print(f"AI Trading status error: {e}")
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "status": gemini_trading_manager.get_status()
+        }, status_code=500)
+
+print("✅ Autonomous AI Trading endpoints yuklendi!")
+
 @app.exception_handler(Exception)
 async def exception_handler_optimized(request, exc):
     """✅ TAMAMEN DÜZELTİLMİŞ Global exception handler"""
