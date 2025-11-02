@@ -686,7 +686,206 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+     // ============ 🤖 GEMİNİ AI FONKSİYONLARI - MEVCUT script.js'in SONUNA EKLEYİN ============
 
+// Gemini HTML elementleri
+const geminiTestSymbol = document.getElementById('gemini-test-symbol');
+const geminiTestButton = document.getElementById('gemini-test-button');
+const geminiStatusButton = document.getElementById('gemini-status-button');
+const geminiClearCacheButton = document.getElementById('gemini-clear-cache-button');
+const geminiResults = document.getElementById('gemini-results');
+const geminiOutput = document.getElementById('gemini-output');
+const geminiStatusText = document.getElementById('gemini-status-text');
+const geminiProvider = document.getElementById('gemini-provider');
+const geminiCacheSize = document.getElementById('gemini-cache-size');
+
+// Gemini AI Test
+if (geminiTestButton) {
+    geminiTestButton.addEventListener('click', async () => {
+        const symbol = geminiTestSymbol.value.trim().toUpperCase();
+        if (!symbol) {
+            showError('Lütfen bir coin sembolü girin.');
+            return;
+        }
+        
+        geminiTestButton.disabled = true;
+        geminiTestButton.textContent = '🤖 AI analiz ediyor...';
+        geminiResults.style.display = 'none';
+        
+        try {
+            const result = await fetchApi('/api/test-gemini', {
+                method: 'POST',
+                body: JSON.stringify({ symbol })
+            });
+            
+            if (result && result.success) {
+                const analysis = result.ai_analysis;
+                
+                let output = `🤖 ${result.symbol} GEMINI AI ANALİZİ\n`;
+                output += `💰 Fiyat: $${result.current_price.toFixed(2)}\n`;
+                output += `═══════════════════════════════════\n\n`;
+                
+                output += `🚦 SİNYAL: ${analysis.signal}\n`;
+                output += `📊 İŞLEM ÖNERİSİ: ${analysis.should_trade ? '✅ EVET' : '❌ HAYIR'}\n`;
+                output += `🎯 GÜVEN SKORU: %${analysis.confidence.toFixed(1)}\n`;
+                output += `⚠️ RİSK SKORU: ${analysis.risk_score}/10\n\n`;
+                
+                output += `📝 AI AÇIKLAMASI:\n${analysis.reasoning}\n\n`;
+                
+                if (analysis.should_trade) {
+                    output += `💹 ÖNERİLEN POZİSYON:\n`;
+                    output += `   🎯 Take Profit: %${analysis.take_profit_percent.toFixed(2)}\n`;
+                    output += `   🛑 Stop Loss: %${analysis.stop_loss_percent.toFixed(2)}\n\n`;
+                }
+                
+                output += `📊 VERİ İSTATİSTİKLERİ:\n`;
+                output += `   1m mumlar: ${result.data_info.klines_1m_count}\n`;
+                output += `   5m mumlar: ${result.data_info.klines_5m_count}\n`;
+                output += `   Timeframe: ${result.data_info.timeframe_primary} + ${result.data_info.timeframe_secondary}\n`;
+                
+                geminiOutput.textContent = output;
+                geminiResults.style.display = 'block';
+                
+                showSuccess(result.message);
+            } else if (result && !result.ai_enabled) {
+                let errorMsg = result.message || 'Gemini AI aktif değil';
+                if (result.help) {
+                    errorMsg += '\n\n' + result.help;
+                }
+                showError(errorMsg);
+                geminiOutput.textContent = `❌ ${errorMsg}`;
+                geminiResults.style.display = 'block';
+            }
+            
+        } catch (error) {
+            showError('Gemini AI test hatası: ' + error.message);
+        } finally {
+            geminiTestButton.disabled = false;
+            geminiTestButton.textContent = '🤖 Gemini AI Test';
+        }
+    });
+}
+
+// Gemini Status Kontrol
+if (geminiStatusButton) {
+    geminiStatusButton.addEventListener('click', async () => {
+        try {
+            const result = await fetchApi('/api/gemini-status');
+            
+            if (result && result.success) {
+                const status = result.status;
+                
+                // UI güncelle
+                if (geminiStatusText) {
+                    geminiStatusText.textContent = status.ai_enabled ? '✅ Aktif' : '❌ Devre Dışı';
+                    geminiStatusText.className = status.ai_enabled ? 'status-running' : 'status-stopped';
+                }
+                
+                if (geminiProvider) {
+                    geminiProvider.textContent = status.provider || '-';
+                }
+                
+                if (geminiCacheSize) {
+                    geminiCacheSize.textContent = status.cache_size || 0;
+                }
+                
+                // Mesaj göster
+                showSuccess(status.message);
+                
+                // Eğer devre dışıysa yardım göster
+                if (!status.ai_enabled) {
+                    console.log('🤖 Gemini AI Kurulum Adımları:');
+                    if (status.setup_steps) {
+                        status.setup_steps.forEach(step => console.log(step));
+                    }
+                    if (status.help) {
+                        console.log('ℹ️ API Key:', status.help);
+                    }
+                }
+            }
+            
+        } catch (error) {
+            showError('Status kontrol hatası: ' + error.message);
+        }
+    });
+}
+
+// Cache Temizle
+if (geminiClearCacheButton) {
+    geminiClearCacheButton.addEventListener('click', async () => {
+        if (!confirm('Gemini AI cache temizlensin mi?')) {
+            return;
+        }
+        
+        try {
+            const result = await fetchApi('/api/gemini-clear-cache', {
+                method: 'POST'
+            });
+            
+            if (result && result.success) {
+                showSuccess(result.message);
+                if (geminiCacheSize) {
+                    geminiCacheSize.textContent = '0';
+                }
+            }
+            
+        } catch (error) {
+            showError('Cache temizleme hatası: ' + error.message);
+        }
+    });
+}
+
+// Enter tuşu desteği - Gemini test
+if (geminiTestSymbol) {
+    geminiTestSymbol.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && geminiTestButton && !geminiTestButton.disabled) {
+            geminiTestButton.click();
+        }
+    });
+}
+
+// Sayfa yüklendiğinde Gemini status otomatik kontrol
+async function checkGeminiHealth() {
+    try {
+        const response = await fetch('/api/gemini-health');
+        if (response.ok) {
+            const health = await response.json();
+            console.log('🤖 Gemini AI Health:', health.status);
+            
+            if (health.status === 'healthy' && geminiStatusText) {
+                geminiStatusText.textContent = '✅ Aktif';
+                geminiStatusText.className = 'status-running';
+            } else if (health.status === 'disabled' && geminiStatusText) {
+                geminiStatusText.textContent = '❌ Devre Dışı';
+                geminiStatusText.className = 'status-stopped';
+            }
+            
+            if (geminiProvider && health.provider) {
+                geminiProvider.textContent = health.provider;
+            }
+            
+            if (geminiCacheSize && health.cache_size !== undefined) {
+                geminiCacheSize.textContent = health.cache_size;
+            }
+        }
+    } catch (e) {
+        console.warn('Gemini health check başarısız:', e);
+    }
+}
+
+// Auth state değiştiğinde Gemini health kontrol et
+auth.onAuthStateChanged(user => {
+    if (user) {
+        // ... mevcut kodlarınız ...
+        
+        // Gemini health check
+        setTimeout(() => {
+            checkGeminiHealth();
+        }, 2000); // 2 saniye sonra kontrol et
+    }
+});
+
+console.log('✅ Gemini AI UI fonksiyonları yüklendi!');
     // Debug için Enter tuşu desteği
     if (debugSymbolInput) {
         debugSymbolInput.addEventListener('keypress', (e) => {
