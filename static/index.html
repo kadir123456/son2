@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basit EMA Cross Bot v1.0</title>
+    <title>Basit EMA Cross Bot v1.0 + 🤖 Gemini AI</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,7 +14,7 @@
     <div id="login-container" class="container">
         <div class="card login-card">
             <h1>🎯 Basit EMA Cross Bot v1.0</h1>
-            <p class="subtitle">EMA 9/21 Kesişim Stratejisi - Basit ve Güvenilir</p>
+            <p class="subtitle">EMA 9/21 Kesişim Stratejisi + 🤖 Gemini AI</p>
             <div class="form-group">
                 <label for="email">E-posta</label>
                 <input type="email" id="email" placeholder="ornek@mail.com" autocomplete="email">
@@ -30,16 +30,16 @@
 
     <div id="app-container" class="container" style="display: none;">
         <header>
-            <h1>🎯 Basit EMA Cross Bot</h1>
+            <h1>🎯 EMA Cross Bot + 🤖 AI</h1>
             <div class="header-info">
                 <span class="badge">EMA 9/21</span>
-                <span class="badge">Basit TP/SL</span>
+                <span class="badge">Gemini AI</span>
             </div>
             <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
         </header>
 
         <main>
-            <!-- STRATEJI BİLGİSİ -->
+            <!-- STRATEJİ BİLGİSİ -->
             <div class="card strategy-card">
                 <h2>📈 Strateji Bilgisi</h2>
                 <div class="strategy-info">
@@ -51,19 +51,45 @@
                         </div>
                     </div>
                     <div class="strategy-item">
-                        <span class="strategy-icon">🎯</span>
+                        <span class="strategy-icon">🤖</span>
                         <div>
-                            <div class="strategy-title">Otomatik TP/SL</div>
-                            <div class="strategy-desc">Her pozisyona otomatik kar al/zarar durdur</div>
+                            <div class="strategy-title">Gemini AI Doğrulama</div>
+                            <div class="strategy-desc">Google AI ile sinyal kalitesi kontrolü</div>
                         </div>
                     </div>
                     <div class="strategy-item">
-                        <span class="strategy-icon">⚡</span>
+                        <span class="strategy-icon">🎯</span>
                         <div>
-                            <div class="strategy-title">Basit ve Hızlı</div>
-                            <div class="strategy-desc">Karmaşık filtre yok, sadece EMA kesişimi</div>
+                            <div class="strategy-title">Otomatik TP/SL</div>
+                            <div class="strategy-desc">Her pozisyona AI önerili kar al/zarar durdur</div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- GEMİNİ AI STATUS -->
+            <div class="card gemini-card">
+                <h2>🤖 Gemini AI Durumu</h2>
+                <div class="gemini-status">
+                    <p>AI Status: <span id="gemini-status-text" class="status-value">Kontrol ediliyor...</span></p>
+                    <p>Provider: <span id="gemini-provider">-</span></p>
+                    <p>Cache: <span id="gemini-cache-size">0</span> kayıt</p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gemini-test-symbol">🤖 AI Test için Coin</label>
+                    <input type="text" id="gemini-test-symbol" placeholder="Örn: BTC">
+                </div>
+                
+                <div class="button-group">
+                    <button id="gemini-test-button" class="btn btn-info">🤖 Gemini AI Test</button>
+                    <button id="gemini-status-button" class="btn btn-secondary">📊 AI Durum</button>
+                    <button id="gemini-clear-cache-button" class="btn btn-warning">🧹 Cache Temizle</button>
+                </div>
+                
+                <div id="gemini-results" class="gemini-results" style="display: none;">
+                    <h3>🤖 AI Analiz Sonucu</h3>
+                    <div id="gemini-output" class="debug-output"></div>
                 </div>
             </div>
 
@@ -168,7 +194,6 @@
                 </div>
                 <button id="scan-symbol-button" class="btn btn-info">🎯 Coin Kontrol Et</button>
             </div>
-            <!-- Bu kodu static/index.html dosyasına, POZİSYON KORUMASI kartından sonra ekleyin -->
 
             <!-- İSTATİSTİKLER -->
             <div class="card stats-card">
