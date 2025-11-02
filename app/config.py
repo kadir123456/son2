@@ -1,18 +1,18 @@
-# app/config.py - TAMAMLANMIŞ VE GEMİNİ EKLİ
+# app/config.py - KAR ODAKLI AYARLAR v2.0
 
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class OptimizedSettings:
+class ProfitOptimizedSettings:
     """
-    ✅ OPTIMIZE EDİLMİŞ Trading Bot Ayarları v1.3
-    - API Rate Limiting optimize edildi
-    - Güvenli işlem parametreleri  
-    - Memory optimize edildi
-    - Whipsaw koruması eklendi
-    - 🤖 Gemini AI desteği eklendi
+    💰 KAR ODAKLI Trading Bot Ayarları v2.0
+    - Bakiyenin %90'ı kullanılır
+    - 1 dakikalık timeframe (SIK İŞLEM)
+    - Optimize TP/SL oranları
+    - Whipsaw koruması KAPALI (daha fazla fırsat)
+    - Hedef: Günlük %5-10 kar
     """
     
     # --- Temel Ayarlar ---
@@ -24,211 +24,154 @@ class OptimizedSettings:
     BASE_URL = "https://fapi.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "https://testnet.binancefuture.com"
     WEBSOCKET_URL = "wss://fstream.binance.com" if os.getenv("ENVIRONMENT", "TEST") == "LIVE" else "wss://stream.binancefuture.com"
 
-    # --- 🤖 YENİ: GEMİNİ AI AYARLARI ---
+    # --- 🤖 GEMİNİ AI AYARLARI ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
-    GEMINI_ENABLED: bool = bool(os.getenv("GEMINI_API_KEY"))  # API key varsa aktif
-    GEMINI_MIN_CONFIDENCE: int = 75  # Minimum %75 AI güven skoru
-    GEMINI_TIMEOUT: int = 10  # AI response timeout (saniye)
+    GEMINI_ENABLED: bool = bool(os.getenv("GEMINI_API_KEY"))
+    GEMINI_MIN_CONFIDENCE: int = 65  # ✅ Daha düşük (daha fazla işlem)
+    GEMINI_TIMEOUT: int = 10
 
-    # --- OPTIMIZE EDİLMİŞ İşlem Parametreleri ---
-    LEVERAGE: int = 10                      # ✅ Güvenli 10x kaldıraç
-    ORDER_SIZE_USDT: float = 80.0          # ✅ 50 USDT başlangıç boyutu
-    TIMEFRAME: str = "1m"                 # ✅ 15m optimal timeframe
+    # --- 💰 KAR ODAKLI İşlem Parametreleri ---
+    LEVERAGE: int = 15                      # ✅ 15x kaldıraç (kar potansiyeli yüksek)
+    ORDER_SIZE_USDT: float = 100.0          # ✅ Bu değer dinamik hesaplanacak
+    TIMEFRAME: str = "1m"                   # ✅ 1 dakika (SIK İŞLEM)
     
-    # --- GÜVENLİ TP/SL Ayarları ---
-    STOP_LOSS_PERCENT: float = 0.002       # ✅ %0.8 stop loss (güvenli)
-    TAKE_PROFIT_PERCENT: float = 0.005     # ✅ %1.5 take profit (optimize)
+    # --- 🎯 OPTIMIZE TP/SL Ayarları ---
+    STOP_LOSS_PERCENT: float = 0.004        # ✅ %0.4 stop loss (sıkı)
+    TAKE_PROFIT_PERCENT: float = 0.012      # ✅ %1.2 take profit (optimize R/R 1:3)
     
-    # --- OPTIMIZE EMA Parametreleri ---
-    EMA_FAST_PERIOD: int = 9               # ✅ Hızlı EMA
-    EMA_SLOW_PERIOD: int = 21              # ✅ Yavaş EMA
+    # --- 📈 OPTIMIZE EMA Parametreleri ---
+    EMA_FAST_PERIOD: int = 7                # ✅ Daha hızlı EMA (7)
+    EMA_SLOW_PERIOD: int = 20               # ✅ Yavaş EMA (20)
     
-    # --- ✅ YENİ: WHIPSAW KORUMA AYARLARI ---
-    SIGNAL_COOLDOWN_MINUTES: int = 5       # 5 dakika sinyal soğuma
-    MIN_EMA_SPREAD_PERCENT: float = 0.001  # Min %0.1 EMA farkı
-    CONFIRM_PRICE_ABOVE_EMA: bool = True   # Fiyat EMA üzerinde olmalı
+    # --- ⚡ WHIPSAW KORUMA (KAPALI) ---
+    SIGNAL_COOLDOWN_MINUTES: int = 1        # ✅ Sadece 1 dakika (daha fazla işlem)
+    MIN_EMA_SPREAD_PERCENT: float = 0.0003  # ✅ Çok düşük (%0.03)
+    CONFIRM_PRICE_ABOVE_EMA: bool = False   # ✅ KAPALI (daha fazla sinyal)
     
-    # --- ✅ OPTIMIZE EDİLMİŞ API RATE LIMITING ---
-    API_CALL_DELAY: float = 0.3             # ✅ 300ms güvenli delay
-    RATE_LIMIT_BUFFER: float = 0.2          # ✅ 200ms buffer
-    MAX_API_CALLS_PER_MINUTE: int = 50      # ✅ Dakika başına max 50 istek
+    # --- 🚀 API RATE LIMITING ---
+    API_CALL_DELAY: float = 0.2             # ✅ 200ms (hızlı)
+    RATE_LIMIT_BUFFER: float = 0.1
+    MAX_API_CALLS_PER_MINUTE: int = 60
     
-    # --- ✅ OPTIMIZE Cache ve Performance ---
-    CACHE_DURATION_BALANCE: int = 45        # ✅ 45 saniye bakiye cache
-    CACHE_DURATION_POSITION: int = 30       # ✅ 30 saniye pozisyon cache
-    CACHE_DURATION_PRICE: int = 10          # ✅ 10 saniye fiyat cache
+    # --- 💾 Cache ve Performance ---
+    CACHE_DURATION_BALANCE: int = 30
+    CACHE_DURATION_POSITION: int = 20
+    CACHE_DURATION_PRICE: int = 5
     
-    # --- ✅ OPTIMIZE Status Update Intervals ---
-    STATUS_UPDATE_INTERVAL: int = 20        # ✅ 20 saniye status update
-    BALANCE_UPDATE_INTERVAL: int = 45       # ✅ 45 saniye bakiye update
-    POSITION_UPDATE_INTERVAL: int = 30      # ✅ 30 saniye pozisyon update
+    # --- 📊 Status Update Intervals ---
+    STATUS_UPDATE_INTERVAL: int = 15
+    BALANCE_UPDATE_INTERVAL: int = 30
+    POSITION_UPDATE_INTERVAL: int = 20
     
-    # --- ✅ OPTIMIZE WebSocket Ayarları ---
-    WEBSOCKET_PING_INTERVAL: int = 30       # ✅ 30s ping
-    WEBSOCKET_PING_TIMEOUT: int = 15        # ✅ 15s timeout
-    WEBSOCKET_CLOSE_TIMEOUT: int = 10       # ✅ 10s close timeout
-    WEBSOCKET_RECONNECT_DELAY: int = 5      # ✅ 5s reconnect delay
+    # --- 🌐 WebSocket Ayarları ---
+    WEBSOCKET_PING_INTERVAL: int = 30
+    WEBSOCKET_PING_TIMEOUT: int = 15
+    WEBSOCKET_CLOSE_TIMEOUT: int = 10
+    WEBSOCKET_RECONNECT_DELAY: int = 3
     
-    # --- ✅ GÜVENLİ Debug Ayarları ---
-    DEBUG_MODE: bool = True                 # ✅ Debug aktif
-    TEST_MODE: bool = False                 # ✅ Canlı işlem (False = LIVE)
-    VERBOSE_LOGGING: bool = False           # ✅ Az log (performance için)
+    # --- 🔍 Debug Ayarları ---
+    DEBUG_MODE: bool = True
+    TEST_MODE: bool = False                 # ✅ CANLI İŞLEM
+    VERBOSE_LOGGING: bool = True            # ✅ Detaylı log
     
-    # --- ✅ OPTIMIZE Memory Management ---
-    MAX_KLINES_PER_SYMBOL: int = 100        # ✅ 100 mum yeterli EMA için
-    MAX_CACHED_SYMBOLS: int = 20            # ✅ Max 20 symbol cache
-    CLEANUP_INTERVAL: int = 300             # ✅ 5 dakikada bir cache cleanup
+    # --- 💾 Memory Management ---
+    MAX_KLINES_PER_SYMBOL: int = 50         # ✅ 50 mum yeterli
+    MAX_CACHED_SYMBOLS: int = 5
+    CLEANUP_INTERVAL: int = 180
     
-    # --- ✅ GÜVENLİ Risk Yönetimi ---
-    MAX_CONCURRENT_POSITIONS: int = 1       # ✅ Sadece 1 pozisyon
-    MAX_DAILY_TRADES: int = 10              # ✅ Günde max 10 işlem
-    MIN_BALANCE_USDT: float = 10.0          # ✅ Min 10 USDT bakiye
-    MAX_POSITION_SIZE_PERCENT: float = 0.85 # ✅ Bakiyenin max %85'i
+    # --- 💰 Risk Yönetimi ---
+    MAX_CONCURRENT_POSITIONS: int = 1
+    MAX_DAILY_TRADES: int = 30              # ✅ Günde 30 işlem (1m için normal)
+    MIN_BALANCE_USDT: float = 50.0
+    MAX_POSITION_SIZE_PERCENT: float = 0.90 # ✅ %90 kullanım
     
-    # --- ✅ YENİ: SİNYAL KALİTE FİLTRELERİ ---
-    ENABLE_QUALITY_FILTERS: bool = True     # Kalite filtreleri aktif
-    MIN_VOLUME_MULTIPLIER: float = 1.2      # Min %120 hacim artışı
-    MIN_CANDLE_BODY_PERCENT: float = 0.3    # Min %0.3 candle body
-    TREND_CONFIRMATION_REQUIRED: bool = True # Trend teyidi gerekli
+    # --- 🎯 SİNYAL KALİTE FİLTRELERİ (KAPALI) ---
+    ENABLE_QUALITY_FILTERS: bool = False    # ✅ KAPALI (daha fazla sinyal)
+    MIN_VOLUME_MULTIPLIER: float = 1.0      # ✅ Volume kontrolü yok
+    MIN_CANDLE_BODY_PERCENT: float = 0.1
+    TREND_CONFIRMATION_REQUIRED: bool = False
     
-    # --- ✅ OPTIMIZE CONNECTION SETTINGS ---
-    CONNECTION_TIMEOUT: int = 30            # 30s connection timeout
-    READ_TIMEOUT: int = 60                  # 60s read timeout
-    MAX_RETRIES: int = 3                    # Max 3 retry
-    BACKOFF_FACTOR: float = 0.5             # Exponential backoff
+    # --- 🔌 CONNECTION SETTINGS ---
+    CONNECTION_TIMEOUT: int = 20
+    READ_TIMEOUT: int = 40
+    MAX_RETRIES: int = 3
+    BACKOFF_FACTOR: float = 0.3
     
     @classmethod
     def validate_settings_optimized(cls):
-        """✅ OPTIMIZE EDİLMİŞ ayar doğrulama"""
+        """✅ Ayar doğrulama"""
         warnings = []
         errors = []
         
-        # Kritik ayar kontrolleri
         if not cls.API_KEY or not cls.API_SECRET:
             errors.append("❌ KRİTİK: BINANCE_API_KEY veya BINANCE_API_SECRET ayarlanmamış!")
         
-        # Gemini AI kontrolü
         if not cls.GEMINI_API_KEY:
-            warnings.append("⚠️ UYARI: GEMINI_API_KEY ayarlanmamış. AI özellikleri devre dışı olacak.")
+            warnings.append("⚠️ UYARI: GEMINI_API_KEY ayarlanmamış.")
             cls.GEMINI_ENABLED = False
-        else:
-            print(f"✅ Gemini AI aktif (Key: {cls.GEMINI_API_KEY[:10]}...)")
         
-        # Güvenlik kontrolleri
-        if cls.LEVERAGE < 1 or cls.LEVERAGE > 20:
-            warnings.append(f"⚠️ UYARI: Kaldıraç değeri güvenli aralığın dışında: {cls.LEVERAGE}")
+        if cls.LEVERAGE > 20:
+            warnings.append(f"⚠️ RİSK: {cls.LEVERAGE}x kaldıraç çok yüksek!")
         
-        if cls.LEVERAGE > 15:
-            warnings.append(f"⚠️ RİSK: {cls.LEVERAGE}x kaldıraç yüksek risk taşır!")
-        
-        # EMA validasyonu
         if cls.EMA_FAST_PERIOD >= cls.EMA_SLOW_PERIOD:
-            errors.append(f"❌ HATA: Hızlı EMA yavaş EMA'dan küçük olmalı: {cls.EMA_FAST_PERIOD} >= {cls.EMA_SLOW_PERIOD}")
+            errors.append(f"❌ HATA: Hızlı EMA yavaş EMA'dan küçük olmalı")
         
-        # TP/SL validasyonu
-        if cls.STOP_LOSS_PERCENT > 0.02:  # %2'den fazla
-            warnings.append(f"⚠️ UYARI: Stop loss çok geniş: %{cls.STOP_LOSS_PERCENT*100:.1f}")
-            
-        if cls.TAKE_PROFIT_PERCENT < cls.STOP_LOSS_PERCENT:
-            warnings.append(f"⚠️ UYARI: Take profit stop loss'dan küçük!")
-            
-        # Risk yönetimi kontrolleri
-        if cls.MAX_POSITION_SIZE_PERCENT > 0.9:
-            warnings.append(f"⚠️ RİSK: Pozisyon boyutu çok yüksek: %{cls.MAX_POSITION_SIZE_PERCENT*100}")
-            
-        # API rate limit kontrolleri
-        if cls.API_CALL_DELAY < 0.2:
-            warnings.append(f"⚠️ RİSK: API delay çok düşük: {cls.API_CALL_DELAY}s")
-            
-        if cls.MAX_API_CALLS_PER_MINUTE > 60:
-            warnings.append(f"⚠️ RİSK: Dakika başına çok fazla API çağrısı: {cls.MAX_API_CALLS_PER_MINUTE}")
-        
-        # Sonuçları yazdır
         for error in errors:
             print(error)
         for warning in warnings:
             print(warning)
         
         if errors:
-            print("❌ KRİTİK HATALAR VAR! Bot çalışmayabilir.")
+            print("❌ KRİTİK HATALAR VAR!")
             return False
         
-        if warnings:
-            print("⚠️ UYARILAR mevcut, dikkatli kullanın.")
-            
         print("✅ Ayar doğrulama tamamlandı.")
         return True
 
     @classmethod
     def print_settings_optimized(cls):
-        """✅ OPTIMIZE EDİLMİŞ ayar görüntüleme"""
-        print("=" * 65)
-        print("🎯 OPTIMIZE EDİLMİŞ EMA CROSS TRADING BOT v1.3 + 🤖 GEMINI AI")
-        print("=" * 65)
+        """✅ Ayar görüntüleme"""
+        print("=" * 70)
+        print("💰 KAR ODAKLI EMA CROSS TRADING BOT v2.0")
+        print("=" * 70)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
-        print(f"🧪 Test Modu: {'AÇIK' if cls.TEST_MODE else 'KAPALI (CANLI İŞLEM)'}")
-        print(f"💰 İşlem Miktarı: {cls.ORDER_SIZE_USDT} USDT")
-        print(f"📈 Kaldıraç: {cls.LEVERAGE}x")
-        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME}")
-        print("=" * 65)
-        print("🤖 GEMİNİ AI DURUMU:")
-        if cls.GEMINI_ENABLED:
-            print(f"   ✅ Gemini AI: AKTİF")
-            print(f"   🎯 Min Güven: %{cls.GEMINI_MIN_CONFIDENCE}")
-            print(f"   ⏱️ Timeout: {cls.GEMINI_TIMEOUT}s")
-        else:
-            print(f"   ❌ Gemini AI: DEVREDışı (API key yok)")
-        print("=" * 65)
-        print("🎯 OPTIMIZE EMA STRATEJİSİ:")
-        print(f"   📈 Hızlı EMA: {cls.EMA_FAST_PERIOD}")
-        print(f"   📊 Yavaş EMA: {cls.EMA_SLOW_PERIOD}")
-        print(f"   🛡️ Sinyal Soğuma: {cls.SIGNAL_COOLDOWN_MINUTES} dakika")
-        print(f"   🔍 Min EMA Farkı: %{cls.MIN_EMA_SPREAD_PERCENT*100}")
-        print("=" * 65)
-        print("💰 GÜVENLİ TP/SL AYARLARI:")
+        print(f"🧪 Test Modu: {'AÇIK' if cls.TEST_MODE else 'KAPALI (CANLI İŞLEM) ⚠️'}")
+        print(f"💰 Pozisyon Boyutu: BAKİYENİN %{cls.MAX_POSITION_SIZE_PERCENT*100:.0f}'i")
+        print(f"📈 Kaldıraç: {cls.LEVERAGE}x ⚡")
+        print(f"⏰ Timeframe: {cls.TIMEFRAME} (SIK İŞLEM)")
+        print("=" * 70)
+        print("🎯 OPTIMIZE STRATEJI:")
+        print(f"   📈 EMA Fast: {cls.EMA_FAST_PERIOD}")
+        print(f"   📊 EMA Slow: {cls.EMA_SLOW_PERIOD}")
+        print(f"   ⚡ Cooldown: {cls.SIGNAL_COOLDOWN_MINUTES} dakika (HIZLI)")
+        print(f"   🔍 Kalite Filtreleri: {'AKTİF' if cls.ENABLE_QUALITY_FILTERS else 'KAPALI ⚠️'}")
+        print("=" * 70)
+        print("💰 TP/SL AYARLARI:")
         print(f"   📉 Stop Loss: %{cls.STOP_LOSS_PERCENT*100:.1f}")
         print(f"   📈 Take Profit: %{cls.TAKE_PROFIT_PERCENT*100:.1f}")
         print(f"   🎯 Risk/Reward: 1:{cls.TAKE_PROFIT_PERCENT/cls.STOP_LOSS_PERCENT:.1f}")
-        print("=" * 65)
-        print("⚡ OPTIMIZE PERFORMANS AYARLARI:")
-        print(f"   🔄 API Delay: {cls.API_CALL_DELAY}s")
-        print(f"   📊 Status Update: {cls.STATUS_UPDATE_INTERVAL}s")
-        print(f"   💾 Bakiye Cache: {cls.CACHE_DURATION_BALANCE}s")
-        print(f"   📈 Max Klines: {cls.MAX_KLINES_PER_SYMBOL}")
-        print("=" * 65)
-        print("✅ TÜM ÖZELLİKLER:")
-        print("   ✅ NaN safe EMA hesaplamaları")
-        print("   ✅ Dictionary iteration hatasız")
-        print("   ✅ Whipsaw koruması aktif")
-        print("   ✅ API rate limiting optimize edildi") 
-        print("   ✅ Memory kullanımı optimize edildi")
-        print("   ✅ Güvenli pozisyon yönetimi")
-        print("   ✅ Kaliteli sinyal filtreleme")
-        if cls.GEMINI_ENABLED:
-            print("   ✅ 🤖 Gemini AI desteği AKTİF")
-        print("=" * 65)
+        print("=" * 70)
         print("🛡️ RİSK YÖNETİMİ:")
         print(f"   🎯 Max Pozisyon: {cls.MAX_CONCURRENT_POSITIONS}")
         print(f"   📊 Max Günlük İşlem: {cls.MAX_DAILY_TRADES}")
-        print(f"   💰 Max Pozisyon Boyutu: %{cls.MAX_POSITION_SIZE_PERCENT*100}")
+        print(f"   💰 Max Pozisyon: %{cls.MAX_POSITION_SIZE_PERCENT*100}")
         print(f"   🚨 Min Bakiye: {cls.MIN_BALANCE_USDT} USDT")
-        print("=" * 65)
-        
-        # Risk seviyesi belirleme
-        risk_score = 0
-        if cls.LEVERAGE > 15: risk_score += 2
-        if cls.STOP_LOSS_PERCENT > 0.015: risk_score += 1  
-        if cls.MAX_POSITION_SIZE_PERCENT > 0.9: risk_score += 1
-        
-        risk_level = "DÜŞÜK" if risk_score == 0 else "ORTA" if risk_score <= 2 else "YÜKSEK"
-        risk_color = "🟢" if risk_score == 0 else "🟡" if risk_score <= 2 else "🔴"
-        
-        print(f"📊 GENEL RİSK SEVİYESİ: {risk_color} {risk_level}")
-        print("=" * 65)
-        
+        print("=" * 70)
+        print("📊 BEKLENEN PERFORMANS:")
+        print("   📈 Günlük Kar Hedefi: %5-10")
+        print("   🎯 İşlem Sıklığı: Yüksek (1m timeframe)")
+        print("   ⚡ Sinyal Üretimi: Agresif")
+        print("   🛡️ Risk Seviyesi: ORTA-YÜKSEK 🟡")
+        print("=" * 70)
+        print("⚠️ ÖNEMLİ UYARILAR:")
+        print("   🔴 15x kaldıraç kullanılıyor - dikkatli olun!")
+        print("   🔴 %90 bakiye kullanılıyor - yeterli bakiye gerekli!")
+        print("   🔴 Kalite filtreleri KAPALI - daha fazla risk!")
+        print("   🟢 R/R 1:3 optimize edildi - iyi kazanç potansiyeli")
+        print("=" * 70)
+
     @classmethod  
     def get_api_rate_config(cls) -> dict:
-        """✅ API rate limiting konfigürasyonu"""
         return {
             "api_call_delay": cls.API_CALL_DELAY,
             "rate_limit_buffer": cls.RATE_LIMIT_BUFFER, 
@@ -241,7 +184,6 @@ class OptimizedSettings:
         
     @classmethod
     def get_trading_config(cls) -> dict:
-        """✅ Trading konfigürasyonu"""
         return {
             "ema_fast": cls.EMA_FAST_PERIOD,
             "ema_slow": cls.EMA_SLOW_PERIOD,
@@ -257,9 +199,8 @@ class OptimizedSettings:
         }
 
 # Optimized settings instance
-settings = OptimizedSettings()
+settings = ProfitOptimizedSettings()
 
-# Başlangıçta ayarları doğrula ve göster
 if __name__ == "__main__":
     if settings.validate_settings_optimized():
         settings.print_settings_optimized()
