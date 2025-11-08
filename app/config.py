@@ -1,4 +1,4 @@
-# app/config.py - OPTİMİZE EDİLMİŞ SCALPING AYARLARI
+# app/config.py - OPTİMİZE EDİLMİŞ + PROFESSIONAL SCALPING AYARLARI
 
 import os
 from dotenv import load_dotenv
@@ -7,14 +7,11 @@ load_dotenv()
 
 class OptimizedScalpingSettings:
     """
-    ⚡ OPTİMİZE EDİLMİŞ SCALPING AYARLARI
+    ⚡ OPTİMİZE EDİLMİŞ + 🔥 PROFESSIONAL SCALPING AYARLARI
     
-    DEĞİŞİKLİKLER:
-    - Dinamik pozisyon boyutu (bakiyenin %15'i)
-    - Daha güvenli kaldıraç (10x)
-    - Gerçekçi TP/SL (%0.8/%0.4)
-    - Minimum momentum filtresi
-    - Trade cooldown (90 saniye)
+    İKİ STRATEJİ:
+    1. Optimized Scalping (Eski) - EMA cross
+    2. Professional Scalping (Yeni) - Pullback + Volume + Trend ✅
     """
     
     # --- Temel Ayarlar ---
@@ -35,17 +32,29 @@ class OptimizedScalpingSettings:
     
     # --- 💰 Pozisyon Ayarları (DİNAMİK) ---
     BALANCE_USAGE_PERCENT: float = 0.15  # Bakiyenin %15'i
-    LEVERAGE: int = 10                   # 10x kaldıraç (daha güvenli)
+    LEVERAGE: int = 15                   # 15x kaldıraç (scalping için ideal)
     MIN_BALANCE_USDT: float = 20         # Minimum 20 USDT
     MIN_POSITION_SIZE_USDT: float = 5.0  # Minimum 5 USDT pozisyon
     
-    # --- 🎯 TP/SL Ayarları (GERÇEKÇİ) ---
+    # --- 🎯 TP/SL Ayarları (ESKI STRATEJİ) ---
     TAKE_PROFIT_PERCENT: float = 0.008   # %0.8 kar al
     STOP_LOSS_PERCENT: float = 0.004     # %0.4 zarar durdur
     
+    # --- 🔥 PROFESSIONAL SCALPING (YENİ) ---
+    USE_PROFESSIONAL_STRATEGY: bool = True  # True = Pro strateji ✅, False = Eski strateji
+    
+    # Professional scalping parametreleri
+    PRO_TP_PERCENT: float = 0.006        # %0.6 kar (mikro scalping)
+    PRO_SL_PERCENT: float = 0.003        # %0.3 zarar (sıkı stop)
+    PRO_MIN_CONFIDENCE: int = 75         # Minimum %75 güven skoru
+    PRO_VOLUME_MULTIPLIER: float = 1.5   # 1.5x volume spike gerekli
+    PRO_MIN_TREND: float = 0.003         # %0.3 minimum trend gücü
+    PRO_PULLBACK_MIN: float = 0.002      # Min %0.2 pullback
+    PRO_PULLBACK_MAX: float = 0.008      # Max %0.8 pullback
+    
     # --- 🛡️ Risk Yönetimi ---
-    MAX_DAILY_TRADES: int = 50           # Günlük max trade
-    TRADE_COOLDOWN_SECONDS: int = 90     # 90 saniye trade aralığı
+    MAX_DAILY_TRADES: int = 40           # Günlük max trade (professional için 40)
+    TRADE_COOLDOWN_SECONDS: int = 60     # 60 saniye trade aralığı
     MIN_MOMENTUM_PERCENT: float = 0.001  # Min %0.1 momentum
     
     # --- 🚀 API Rate Limiting ---
@@ -102,21 +111,41 @@ class OptimizedScalpingSettings:
     def print_settings(cls):
         """Ayarları göster"""
         print("=" * 70)
-        print("⚡ OPTİMİZE EDİLMİŞ SCALPING STRATEJİSİ")
+        if cls.USE_PROFESSIONAL_STRATEGY:
+            print("🔥 PROFESSIONAL SCALPING STRATEGY 🔥")
+        else:
+            print("⚡ OPTIMIZED SCALPING STRATEGY")
         print("=" * 70)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
         print(f"🧪 Test Modu: {'AÇIK' if cls.TEST_MODE else 'KAPALI (CANLI)'}")
-        print(f"📊 EMA: {cls.EMA_FAST_PERIOD}/{cls.EMA_SLOW_PERIOD}")
-        print(f"⏰ Timeframe: {cls.TIMEFRAME}")
-        print(f"💰 Pozisyon: Bakiyenin %{cls.BALANCE_USAGE_PERCENT*100:.0f}'i")
-        print(f"📈 Kaldıraç: {cls.LEVERAGE}x")
-        print(f"🎯 TP: %{cls.TAKE_PROFIT_PERCENT*100:.2f}")
-        print(f"🛑 SL: %{cls.STOP_LOSS_PERCENT*100:.2f}")
-        print(f"⏳ Trade Cooldown: {cls.TRADE_COOLDOWN_SECONDS}s")
-        print(f"📉 Min Momentum: %{cls.MIN_MOMENTUM_PERCENT*100:.2f}")
-        print(f"🔢 Günlük Max Trade: {cls.MAX_DAILY_TRADES}")
+        
+        if cls.USE_PROFESSIONAL_STRATEGY:
+            print(f"\n🔥 PROFESSIONAL SCALPING:")
+            print(f"   📊 Strateji: Pullback + Volume + Trend")
+            print(f"   🎯 TP: %{cls.PRO_TP_PERCENT*100:.2f}")
+            print(f"   🛑 SL: %{cls.PRO_SL_PERCENT*100:.2f}")
+            print(f"   ✨ Min Confidence: {cls.PRO_MIN_CONFIDENCE}%")
+            print(f"   📈 Min Trend: %{cls.PRO_MIN_TREND*100:.2f}")
+            print(f"   📊 Volume Spike: {cls.PRO_VOLUME_MULTIPLIER}x")
+            print(f"   🔄 Pullback: %{cls.PRO_PULLBACK_MIN*100:.2f}-%{cls.PRO_PULLBACK_MAX*100:.2f}")
+        else:
+            print(f"\n⚡ OPTIMIZED SCALPING:")
+            print(f"   📊 EMA: {cls.EMA_FAST_PERIOD}/{cls.EMA_SLOW_PERIOD}")
+            print(f"   🎯 TP: %{cls.TAKE_PROFIT_PERCENT*100:.2f}")
+            print(f"   🛑 SL: %{cls.STOP_LOSS_PERCENT*100:.2f}")
+        
+        print(f"\n💰 POZİSYON:")
+        print(f"   Bakiye Kullanımı: %{cls.BALANCE_USAGE_PERCENT*100:.0f}")
+        print(f"   Kaldıraç: {cls.LEVERAGE}x")
+        print(f"   Min Bakiye: {cls.MIN_BALANCE_USDT} USDT")
+        
+        print(f"\n🛡️ RİSK YÖNETİMİ:")
+        print(f"   ⏳ Trade Cooldown: {cls.TRADE_COOLDOWN_SECONDS}s")
+        print(f"   🔢 Günlük Max Trade: {cls.MAX_DAILY_TRADES}")
+        print(f"   ⏰ Timeframe: {cls.TIMEFRAME}")
+        
         print("=" * 70)
-        print("✅ FİLTRELER AKTİF - Güvenli Trade")
+        print("🎯 HEDEF: Günlük %5-10, Win Rate %75+")
         print("=" * 70)
 
 # Global settings instance
