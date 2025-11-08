@@ -104,7 +104,7 @@ class ProfitOptimizedBotCore:
             self.status["account_balance"] = await binance_client.get_account_balance()
             print(f"   Bakiye: {self.status['account_balance']:.2f} USDT")
 
-            if self.status["account_balance"] < 50:
+            if self.status["account_balance"] < 5:
                 raise Exception(f"Yetersiz bakiye! Min: 50 USDT")
 
             # 3. Symbol bilgileri
