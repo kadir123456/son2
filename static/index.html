@@ -3,281 +3,361 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📊 Bollinger Bands Al-Sat Bot</title>
+    <title>⚡ Hızlı Scalping Bot</title>
     <style>
-        :root {
-            --bg: #0d1117;
-            --card-bg: #161b22;
-            --border: #30363d;
-            --text: #c9d1d9;
-            --text-muted: #8b949e;
-            --primary: #238636;
-            --danger: #da3633;
-            --info: #1f6feb;
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
         }
-        
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
         
-        .container { max-width: 500px; width: 100%; }
-        
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
         }
         
         h1 {
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(45deg, var(--primary), var(--info));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        h2 {
-            font-size: 1.1rem;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 0.5rem;
+            text-align: center;
+            color: #667eea;
+            font-size: 2rem;
+            margin-bottom: 10px;
         }
         
         .subtitle {
-            color: var(--text-muted);
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
             font-size: 0.9rem;
-            margin-bottom: 1.5rem;
         }
         
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
+        .card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card h2 {
+            color: #333;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
         }
         
         label {
-            font-size: 0.85rem;
+            display: block;
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
             font-weight: 500;
-            color: var(--text-muted);
         }
         
         input {
             width: 100%;
-            padding: 0.7rem;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--bg);
-            color: var(--text);
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
             font-size: 1rem;
+            transition: all 0.3s;
         }
         
         input:focus {
             outline: none;
-            border-color: var(--info);
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
         
-        .btn {
-            width: 100%;
-            padding: 0.75rem;
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-size: 1rem;
-            font-weight: 700;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
         }
         
         .btn-start {
-            background: var(--primary);
-            color: #fff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
         }
         
-        .btn-start:hover { background: #2ea043; }
+        .btn-start:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
         
         .btn-stop {
-            background: var(--danger);
-            color: #fff;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
         }
         
-        .btn-stop:hover { background: #ff6b6b; }
+        .btn-stop:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(245, 87, 108, 0.3);
+        }
         
-        .btn:disabled {
-            background: #21262d;
-            color: var(--text-muted);
+        .btn-refresh {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        
+        .btn-refresh:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
+            transform: none !important;
         }
         
         .status-grid {
             display: grid;
             grid-template-columns: auto 1fr;
-            gap: 0.5rem 1rem;
+            gap: 10px 20px;
+            align-items: center;
         }
         
         .status-label {
-            color: var(--text-muted);
+            color: #666;
+            font-size: 0.9rem;
         }
         
         .status-value {
             text-align: right;
             font-weight: 600;
+            color: #333;
         }
         
-        .status-running {
-            color: var(--primary);
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
         }
         
-        .status-stopped {
-            color: var(--danger);
+        .badge-running {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
         }
         
-        .error {
-            color: var(--danger);
-            text-align: center;
-            margin-top: 1rem;
-            font-size: 0.9rem;
+        .badge-stopped {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
         }
         
         .info-box {
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 1rem;
-            margin-top: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .info-box h3 {
+            margin-bottom: 10px;
+            font-size: 1rem;
         }
         
         .info-item {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 0.5rem;
+            margin-bottom: 5px;
             font-size: 0.9rem;
         }
         
-        .info-item:last-child {
-            margin-bottom: 0;
+        .error {
+            color: #f5576c;
+            text-align: center;
+            margin-top: 10px;
+            font-size: 0.9rem;
         }
         
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            background: var(--info);
-            color: #fff;
-            margin-right: 0.5rem;
-        }
-        
-        #login-container { display: flex; }
-        #app-container { display: none; }
-        
-        .btn-logout {
+        .logout-btn {
             position: absolute;
-            top: 1rem;
-            right: 1rem;
-            padding: 0.5rem 1rem;
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-muted);
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 8px;
             cursor: pointer;
-            border-radius: 6px;
-            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.3s;
         }
         
-        .btn-logout:hover {
-            background: var(--danger);
-            color: #fff;
+        .logout-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        #login-container {
+            display: flex;
+        }
+        
+        #app-container {
+            display: none;
+            position: relative;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .badge-running {
+            animation: pulse 2s infinite;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
 <body>
-    <!-- Login -->
+    <!-- Login Ekranı -->
     <div id="login-container" class="container">
+        <h1>⚡ Hızlı Scalping Bot</h1>
+        <p class="subtitle">Sürekli agresif trade - Dakikada kar!</p>
+        
         <div class="card">
-            <h1>📊 Bollinger Bands Bot</h1>
-            <p class="subtitle">Her dakika 1 LONG + 1 SHORT pozisyon</p>
-            <div class="form-group">
+            <h2>Giriş Yap</h2>
+            <div class="input-group">
                 <label>E-posta</label>
                 <input type="email" id="email" placeholder="ornek@mail.com">
             </div>
-            <div class="form-group">
+            <div class="input-group">
                 <label>Şifre</label>
                 <input type="password" id="password" placeholder="••••••••">
             </div>
-            <button id="login-btn" class="btn btn-start">Giriş Yap</button>
+            <button class="btn-start" id="login-btn">Giriş Yap</button>
             <p id="login-error" class="error"></p>
+        </div>
+        
+        <div class="info-box">
+            <h3>⚡ Özellikler</h3>
+            <div class="info-item">
+                <span>Timeframe:</span>
+                <span>1 dakika</span>
+            </div>
+            <div class="info-item">
+                <span>Pozisyon:</span>
+                <span>10 USDT</span>
+            </div>
+            <div class="info-item">
+                <span>Kaldıraç:</span>
+                <span>15x</span>
+            </div>
+            <div class="info-item">
+                <span>TP / SL:</span>
+                <span>%0.4 / %0.2</span>
+            </div>
         </div>
     </div>
 
-    <!-- App -->
+    <!-- Ana Uygulama -->
     <div id="app-container" class="container">
-        <button id="logout-btn" class="btn-logout">Çıkış</button>
+        <button class="logout-btn" id="logout-btn">Çıkış</button>
         
-        <div class="card">
-            <h1>📊 Bollinger Bands Bot</h1>
-            <p class="subtitle">Her dakika 1 LONG + 1 SHORT - 10 USDT sabit</p>
-            
-            <div class="info-box">
-                <div class="info-item">
-                    <span>📊 Strateji:</span>
-                    <span>Bollinger Bantları</span>
-                </div>
-                <div class="info-item">
-                    <span>⏰ Timeframe:</span>
-                    <span>1 dakika</span>
-                </div>
-                <div class="info-item">
-                    <span>💰 Pozisyon:</span>
-                    <span>10 USDT (sabit)</span>
-                </div>
-                <div class="info-item">
-                    <span>📈 Kaldıraç:</span>
-                    <span>10x</span>
-                </div>
+        <h1>⚡ Hızlı Scalping Bot</h1>
+        <p class="subtitle">Sürekli trade - Filtre YOK!</p>
+        
+        <div class="info-box">
+            <h3>📊 Strateji Bilgileri</h3>
+            <div class="info-item">
+                <span>Timeframe:</span>
+                <span>1 dakika</span>
+            </div>
+            <div class="info-item">
+                <span>Pozisyon:</span>
+                <span>10 USDT</span>
+            </div>
+            <div class="info-item">
+                <span>Kaldıraç:</span>
+                <span>15x</span>
+            </div>
+            <div class="info-item">
+                <span>TP / SL:</span>
+                <span>%0.4 / %0.2</span>
             </div>
         </div>
-
+        
         <div class="card">
             <h2>🎯 Bot Kontrol</h2>
-            <div class="form-group">
+            <div class="input-group">
                 <label>Coin Sembolü</label>
                 <input type="text" id="symbol-input" placeholder="BTC, ETH, SOL...">
             </div>
-            <button id="start-btn" class="btn btn-start">🚀 Bot Başlat</button>
-            <button id="stop-btn" class="btn btn-stop" disabled>🛑 Bot Durdur</button>
+            <div class="btn-group">
+                <button class="btn-start" id="start-btn">🚀 Başlat</button>
+                <button class="btn-stop" id="stop-btn" disabled>🛑 Durdur</button>
+            </div>
         </div>
-
+        
         <div class="card">
             <h2>📊 Bot Durumu</h2>
             <div class="status-grid">
                 <span class="status-label">Durum:</span>
-                <span class="status-value" id="status-text">Başlatılmadı</span>
+                <span class="status-value">
+                    <span class="status-badge badge-stopped" id="status-badge">Başlatılmadı</span>
+                </span>
                 
                 <span class="status-label">Coin:</span>
                 <span class="status-value" id="status-symbol">-</span>
                 
                 <span class="status-label">Toplam İşlem:</span>
-                <span class="status-value" id="status-trades">0</span>
+                <span class="status-value" id="status-total">0</span>
                 
                 <span class="status-label">Başarılı:</span>
-                <span class="status-value status-running" id="status-success">0</span>
+                <span class="status-value" style="color: #43e97b;" id="status-success">0</span>
                 
                 <span class="status-label">Başarısız:</span>
-                <span class="status-value status-stopped" id="status-failed">0</span>
+                <span class="status-value" style="color: #f5576c;" id="status-failed">0</span>
+                
+                <span class="status-label">Başarı Oranı:</span>
+                <span class="status-value" id="status-winrate">%0</span>
             </div>
         </div>
-
+        
         <div class="card">
             <h2>💰 Hesap Bilgileri</h2>
             <div class="status-grid">
@@ -290,7 +370,9 @@
                 <span class="status-label">Toplam PnL:</span>
                 <span class="status-value" id="total-pnl">0 USDT</span>
             </div>
-            <button id="refresh-account" class="btn btn-start" style="margin-top: 1rem;">🔄 Hesap Yenile</button>
+            <button class="btn-refresh" id="refresh-account" style="margin-top: 15px; width: 100%;">
+                🔄 Hesap Yenile
+            </button>
         </div>
     </div>
 
@@ -326,11 +408,12 @@
         const startBtn = document.getElementById('start-btn');
         const stopBtn = document.getElementById('stop-btn');
         
-        const statusText = document.getElementById('status-text');
+        const statusBadge = document.getElementById('status-badge');
         const statusSymbol = document.getElementById('status-symbol');
-        const statusTrades = document.getElementById('status-trades');
+        const statusTotal = document.getElementById('status-total');
         const statusSuccess = document.getElementById('status-success');
         const statusFailed = document.getElementById('status-failed');
+        const statusWinrate = document.getElementById('status-winrate');
         
         const accountBalance = document.getElementById('account-balance');
         const openPositions = document.getElementById('open-positions');
@@ -436,13 +519,20 @@
             const result = await fetchApi('/api/status');
             if (!result) return;
             
-            statusText.textContent = result.status_message || 'Bilinmiyor';
-            statusText.className = result.is_running ? 'status-value status-running' : 'status-value status-stopped';
+            // Status badge
+            if (result.is_running) {
+                statusBadge.textContent = 'ÇALIŞIYOR';
+                statusBadge.className = 'status-badge badge-running';
+            } else {
+                statusBadge.textContent = 'DURDU';
+                statusBadge.className = 'status-badge badge-stopped';
+            }
             
             statusSymbol.textContent = result.symbol || '-';
-            statusTrades.textContent = result.total_trades || 0;
+            statusTotal.textContent = result.total_trades || 0;
             statusSuccess.textContent = result.successful_trades || 0;
             statusFailed.textContent = result.failed_trades || 0;
+            statusWinrate.textContent = result.win_rate || '%0';
             
             startBtn.disabled = result.is_running;
             stopBtn.disabled = !result.is_running;
@@ -461,8 +551,7 @@
                 
                 const pnl = result.total_pnl || 0;
                 totalPnl.textContent = `${pnl.toFixed(2)} USDT`;
-                totalPnl.className = pnl > 0 ? 'status-value status-running' : 
-                                     pnl < 0 ? 'status-value status-stopped' : 'status-value';
+                totalPnl.style.color = pnl > 0 ? '#43e97b' : pnl < 0 ? '#f5576c' : '#333';
             }
             
             refreshAccountBtn.disabled = false;
@@ -483,7 +572,7 @@
             }
         }
 
-        console.log('📊 Bollinger Bands Bot UI yüklendi!');
+        console.log('⚡ Hızlı Scalping Bot UI yüklendi!');
     </script>
 </body>
 </html>
