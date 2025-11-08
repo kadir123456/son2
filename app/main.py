@@ -11,39 +11,58 @@ from .config import settings
 from .firebase_manager import firebase_manager
 from .binance_client import create_binance_client
 from .fast_scalping_strategy import FastScalpingStrategy
+from .professional_scalping_strategy import ProfessionalScalpingStrategy
 from .fast_scalping_bot import create_bot
 
 bearer_scheme = HTTPBearer()
 
 app = FastAPI(
-    title="Hızlı Scalping Bot",
-    version="1.0.0",
-    description="30 saniye ve 1 dakikalık agresif scalping - Sürekli trade"
+    title="Professional Scalping Bot",
+    version="2.0.0",
+    description="Ultra Professional Scalping - Pullback + Volume + Trend"
 )
 
 # Instance'ları global olarak oluştur
 binance_client = create_binance_client(settings)
-strategy = FastScalpingStrategy()
+
+# Strateji seçimi - config'e göre
+if settings.USE_PROFESSIONAL_STRATEGY:
+    strategy = ProfessionalScalpingStrategy()
+    print("✅ PROFESSIONAL SCALPING STRATEGY aktif!")
+else:
+    strategy = FastScalpingStrategy()
+    print("✅ Fast Scalping Strategy aktif")
+
 fast_scalping_bot = create_bot(settings, binance_client, strategy, firebase_manager)
 
 
 # ===================== STARTUP =====================
 @app.on_event("startup")
 async def startup_event():
-    """✅ Hızlı Scalping Bot başlangıcı"""
-    print("🚀 Hızlı Scalping Bot başlatılıyor...")
+    """✅ Professional Scalping Bot başlangıcı"""
+    print("🚀 Professional Scalping Bot başlatılıyor...")
     print("=" * 70)
-    print("⚡ STRATEJİ: Sürekli agresif scalping")
+    
+    if settings.USE_PROFESSIONAL_STRATEGY:
+        print("🔥 STRATEJİ: PROFESSIONAL SCALPING")
+        print("   📊 Pullback Detection + Volume Spike + Trend")
+        print(f"   🎯 TP: %{settings.PRO_TP_PERCENT*100:.2f} | SL: %{settings.PRO_SL_PERCENT*100:.2f}")
+        print(f"   ✨ Min Confidence: {settings.PRO_MIN_CONFIDENCE}%")
+        print(f"   📈 Min Trend: %{settings.PRO_MIN_TREND*100:.3f}")
+    else:
+        print("⚡ STRATEJİ: Optimized Scalping (Eski)")
+        print(f"   🎯 TP: %{settings.TAKE_PROFIT_PERCENT*100:.2f} | SL: %{settings.STOP_LOSS_PERCENT*100:.2f}")
+    
     print(f"💰 POZİSYON: %{settings.BALANCE_USAGE_PERCENT*100:.0f} bakiye")
     print(f"📈 KALDIRAÇ: {settings.LEVERAGE}x")
     print("⏰ TIMEFRAME: 1 dakika")
-    print(f"🎯 TP: %{settings.TAKE_PROFIT_PERCENT*100:.2f} | SL: %{settings.STOP_LOSS_PERCENT*100:.2f}")
     print(f"⏳ COOLDOWN: {settings.TRADE_COOLDOWN_SECONDS}s")
     print(f"🔢 GÜNLÜK LİMİT: {settings.MAX_DAILY_TRADES} trade")
     print("=" * 70)
+    print("🎯 HEDEF: Günlük %5-10, Win Rate %75+")
+    print("=" * 70)
     
     if settings.validate_settings():
-        settings.print_settings()
         print("✅ Tüm ayarlar geçerli - Bot hazır!")
     else:
         print("❌ Ayar hatalarını kontrol edin!")
@@ -103,18 +122,19 @@ async def start_bot(
         
         return JSONResponse({
             "success": True,
-            "message": f"Optimized Scalping Bot {symbol} için başlatılıyor...",
+            "message": f"Professional Scalping Bot {symbol} için başlatılıyor...",
             "symbol": symbol,
             "user": user_email,
-            "strategy": "Optimized Scalping v2.0",
+            "strategy": "Professional Pullback Scalping v2.0" if settings.USE_PROFESSIONAL_STRATEGY else "Fast Scalping v1.0",
             "info": {
                 "position_size": f"%{settings.BALANCE_USAGE_PERCENT*100:.0f} bakiye",
                 "leverage": f"{settings.LEVERAGE}x",
                 "timeframe": "1m",
-                "tp": f"%{settings.TAKE_PROFIT_PERCENT*100:.2f}",
-                "sl": f"%{settings.STOP_LOSS_PERCENT*100:.2f}",
+                "tp": f"%{settings.PRO_TP_PERCENT*100:.2f}" if settings.USE_PROFESSIONAL_STRATEGY else f"%{settings.TAKE_PROFIT_PERCENT*100:.2f}",
+                "sl": f"%{settings.PRO_SL_PERCENT*100:.2f}" if settings.USE_PROFESSIONAL_STRATEGY else f"%{settings.STOP_LOSS_PERCENT*100:.2f}",
                 "cooldown": f"{settings.TRADE_COOLDOWN_SECONDS}s",
-                "daily_limit": settings.MAX_DAILY_TRADES
+                "daily_limit": settings.MAX_DAILY_TRADES,
+                "min_confidence": f"{settings.PRO_MIN_CONFIDENCE}%" if settings.USE_PROFESSIONAL_STRATEGY else "N/A"
             }
         })
         
