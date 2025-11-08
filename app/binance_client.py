@@ -1,12 +1,13 @@
+# app/binance_client.py - TP/SL FIX
 import asyncio
 from binance import AsyncClient
 from binance.exceptions import BinanceAPIException
-from .config import settings
 import time
 from typing import Optional, Dict, Any
+import math
 
-class SimpleBinanceClient:
-    def __init__(self):
+class FixedBinanceClient:
+    def __init__(self, settings):
         self.api_key = settings.API_KEY
         self.api_secret = settings.API_SECRET
         self.is_testnet = settings.ENVIRONMENT == "TEST"
@@ -16,33 +17,29 @@ class SimpleBinanceClient:
         self._cached_balance = 0.0
         self._rate_limit_delay_time = 0.2
         
-        print(f"🎯 Basit Binance İstemcisi başlatılıyor. Ortam: {settings.ENVIRONMENT}")
+        print(f"🎯 Fixed Binance Client başlatılıyor. Ortam: {settings.ENVIRONMENT}")
         
     async def _rate_limit_delay(self):
-        """Rate limit koruması için bekleme"""
+        """Rate limit koruması"""
         await asyncio.sleep(self._rate_limit_delay_time)
         
     async def initialize(self):
         """Bağlantıyı başlat"""
         if self.client is None:
             try:
-                self.client = await AsyncClient.create(self.api_key, self.api_secret, testnet=self.is_testnet)
+                self.client = await AsyncClient.create(
+                    self.api_key, self.api_secret, testnet=self.is_testnet
+                )
                 await self._rate_limit_delay()
                 
-                # Exchange info al
                 self.exchange_info = await self.client.get_exchange_info()
                 
                 if not self.exchange_info or 'symbols' not in self.exchange_info:
                     raise Exception("Exchange info alınamadı")
                     
-                print("✅ Basit Binance AsyncClient başarıyla başlatıldı.")
-                
-                # Test connection
+                print("✅ Binance AsyncClient başarıyla başlatıldı.")
                 await self._test_connection()
                 
-            except BinanceAPIException as e:
-                print(f"❌ Binance API Hatası: {e}")
-                raise e
             except Exception as e:
                 print(f"❌ Binance bağlantı hatası: {e}")
                 raise e
@@ -72,29 +69,48 @@ class SimpleBinanceClient:
             print(f"⚠️ Bağlantı testi başarısız: {e}")
             return False
 
-    async def create_simple_position(self, symbol: str, side: str, quantity: float, 
-                                   entry_price: float, price_precision: int) -> Optional[Dict]:
+    async def create_position_with_tpsl(
+        self, 
+        symbol: str, 
+        side: str, 
+        quantity: float,
+        entry_price: float, 
+        price_precision: int,
+        tp_percent: float,
+        sl_percent: float
+    ) -> Optional[Dict]:
         """
-        🎯 Basit pozisyon oluştur (sadece TP/SL ile)
+        🎯 POZİSYON AÇ + TP/SL EKLE (DÜZELTİLMİŞ)
+        
+        DEĞİŞİKLİKLER:
+        1. Ana pozisyon açıldıktan sonra doğrulama
+        2. TP/SL için daha fazla bekleme
+        3. GTC yerine GTE_GTC kullanımı
+        4. Hata durumunda pozisyon kapatma
         """
         def format_price(price):
             return f"{price:.{price_precision}f}"
             
         try:
-            print(f"🎯 {symbol} basit pozisyonu oluşturuluyor:")
-            print(f"   Yön: {side}, Miktar: {quantity}, Fiyat: {entry_price}")
+            print(f"\n{'='*60}")
+            print(f"🎯 {symbol} POZİSYON AÇILIYOR")
+            print(f"{'='*60}")
+            print(f"   Yön: {side}")
+            print(f"   Miktar: {quantity}")
+            print(f"   Entry: {entry_price}")
+            print(f"   TP: %{tp_percent*100:.2f} | SL: %{sl_percent*100:.2f}")
             
-            # Test modu kontrolü
-            if settings.TEST_MODE:
+            # TEST MODU
+            if hasattr(self, 'TEST_MODE') and self.TEST_MODE:
                 print(f"🧪 TEST: {symbol} pozisyon simüle edildi")
                 return {"orderId": "TEST_" + str(int(time.time())), "status": "FILLED"}
             
-            # Açık emirleri temizle
+            # 1. Açık emirleri temizle
             await self.cancel_all_orders_safe(symbol)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)
             
-            # Ana pozisyonu aç
-            print(f"📈 {symbol} ana pozisyon açılıyor...")
+            # 2. Ana pozisyon aç
+            print(f"\n📈 Ana pozisyon açılıyor...")
             await self._rate_limit_delay()
             
             main_order = await self.client.futures_create_order(
@@ -105,57 +121,103 @@ class SimpleBinanceClient:
             )
             
             if not main_order or 'orderId' not in main_order:
-                print(f"❌ {symbol} ana emir oluşturulamadı")
+                print(f"❌ Ana emir oluşturulamadı")
                 return None
                 
-            print(f"✅ Ana pozisyon başarılı: {symbol} {side} {quantity}")
-            await asyncio.sleep(1.0)
+            print(f"✅ Ana pozisyon AÇILDI: Order ID {main_order['orderId']}")
             
-            # TP/SL fiyatlarını hesapla
-            if side == 'BUY':  # Long pozisyon
-                sl_price = entry_price * (1 - settings.STOP_LOSS_PERCENT)
-                tp_price = entry_price * (1 + settings.TAKE_PROFIT_PERCENT)
-                opposite_side = 'SELL'
-            else:  # Short pozisyon
-                sl_price = entry_price * (1 + settings.STOP_LOSS_PERCENT)
-                tp_price = entry_price * (1 - settings.TAKE_PROFIT_PERCENT)
-                opposite_side = 'BUY'
+            # 3. POZİSYON DOĞRULAMASI (ÖNEMLİ!)
+            print(f"\n🔍 Pozisyon doğrulanıyor...")
+            await asyncio.sleep(2.0)  # Pozisyonun açılması için bekle
             
-            formatted_sl_price = format_price(sl_price)
-            formatted_tp_price = format_price(tp_price)
+            position = await self._verify_position(symbol, side)
+            if not position:
+                print(f"⚠️ Pozisyon doğrulanamadı, TP/SL eklenemiyor")
+                return main_order
             
-            print(f"💡 TP/SL planı:")
-            print(f"   SL: {formatted_sl_price}")
-            print(f"   TP: {formatted_tp_price}")
+            print(f"✅ Pozisyon doğrulandı: {abs(float(position['positionAmt']))} {symbol}")
             
-            # Stop Loss ekle
-            sl_order = await self._create_stop_loss(symbol, opposite_side, quantity, formatted_sl_price)
+            # 4. TP/SL Hesapla
+            opposite_side = 'SELL' if side == 'BUY' else 'BUY'
             
-            # Take Profit ekle
-            tp_order = await self._create_take_profit(symbol, opposite_side, quantity, formatted_tp_price)
+            if side == 'BUY':  # Long
+                tp_price = entry_price * (1 + tp_percent)
+                sl_price = entry_price * (1 - sl_percent)
+            else:  # Short
+                tp_price = entry_price * (1 - tp_percent)
+                sl_price = entry_price * (1 + sl_percent)
             
-            # Sonuç raporu
-            success_count = sum([bool(sl_order), bool(tp_order)])
-            if success_count >= 1:
-                print(f"✅ {symbol} pozisyon başarılı! ({success_count}/2 emir)")
+            formatted_tp = format_price(tp_price)
+            formatted_sl = format_price(sl_price)
+            
+            print(f"\n💹 TP/SL SEVİYELERİ:")
+            print(f"   Take Profit: {formatted_tp}")
+            print(f"   Stop Loss: {formatted_sl}")
+            
+            # 5. STOP LOSS Ekle
+            await asyncio.sleep(0.5)
+            sl_success = await self._create_stop_loss_fixed(
+                symbol, opposite_side, quantity, formatted_sl
+            )
+            
+            # 6. TAKE PROFIT Ekle
+            await asyncio.sleep(0.5)
+            tp_success = await self._create_take_profit_fixed(
+                symbol, opposite_side, quantity, formatted_tp
+            )
+            
+            # 7. Sonuç raporu
+            success_count = sum([sl_success, tp_success])
+            
+            print(f"\n{'='*60}")
+            if success_count == 2:
+                print(f"✅ {symbol} POZİSYON TAM KORUMALI (TP + SL)")
+            elif success_count == 1:
+                print(f"⚠️ {symbol} KISMÎ KORUMA ({success_count}/2)")
             else:
-                print(f"⚠️ {symbol} TP/SL eklenemedi")
-                
+                print(f"❌ {symbol} KORUMASIZ POZİSYON!")
+                # Korumasız pozisyonu kapat
+                await self._emergency_close_position(symbol, opposite_side, quantity)
+            print(f"{'='*60}\n")
+            
             return main_order
             
         except BinanceAPIException as e:
-            print(f"❌ {symbol} pozisyon hatası: {e}")
+            print(f"❌ {symbol} Binance API hatası: {e}")
             await self.cancel_all_orders_safe(symbol)
             return None
         except Exception as e:
-            print(f"❌ {symbol} beklenmeyen hata: {e}")
+            print(f"❌ {symbol} Beklenmeyen hata: {e}")
             await self.cancel_all_orders_safe(symbol)
             return None
 
-    async def _create_stop_loss(self, symbol: str, side: str, quantity: float, price: str) -> Optional[Dict]:
-        """Stop Loss emri oluştur"""
+    async def _verify_position(self, symbol: str, expected_side: str) -> Optional[Dict]:
+        """Pozisyonun açıldığını doğrula"""
         try:
-            print(f"🛑 {symbol} Stop Loss oluşturuluyor: {price}")
+            await self._rate_limit_delay()
+            positions = await self.client.futures_position_information(symbol=symbol)
+            
+            for pos in positions:
+                position_amt = float(pos['positionAmt'])
+                if position_amt == 0:
+                    continue
+                
+                actual_side = 'BUY' if position_amt > 0 else 'SELL'
+                if actual_side == expected_side:
+                    return pos
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Pozisyon doğrulama hatası: {e}")
+            return None
+
+    async def _create_stop_loss_fixed(
+        self, symbol: str, side: str, quantity: float, price: str
+    ) -> bool:
+        """STOP LOSS (DÜZELTİLMİŞ)"""
+        try:
+            print(f"🛑 Stop Loss oluşturuluyor: {price}")
             await self._rate_limit_delay()
             
             sl_order = await self.client.futures_create_order(
@@ -164,23 +226,30 @@ class SimpleBinanceClient:
                 type='STOP_MARKET',
                 quantity=quantity,
                 stopPrice=price,
-                timeInForce='GTE_GTC',
-                reduceOnly=True
+                timeInForce='GTE_GTC',  # Good Till Expire - Good Till Cancel
+                reduceOnly=True,
+                closePosition=False
             )
             
             if sl_order and 'orderId' in sl_order:
-                print(f"✅ Stop Loss başarılı: {price}")
-                return sl_order
-            return None
+                print(f"✅ Stop Loss BAŞARILI: {price} (Order ID: {sl_order['orderId']})")
+                return True
             
+            return False
+            
+        except BinanceAPIException as e:
+            print(f"❌ Stop Loss API hatası: {e.code} - {e.message}")
+            return False
         except Exception as e:
-            print(f"❌ Stop Loss hatası: {e}")
-            return None
+            print(f"❌ Stop Loss genel hatası: {e}")
+            return False
 
-    async def _create_take_profit(self, symbol: str, side: str, quantity: float, price: str) -> Optional[Dict]:
-        """Take Profit emri oluştur"""
+    async def _create_take_profit_fixed(
+        self, symbol: str, side: str, quantity: float, price: str
+    ) -> bool:
+        """TAKE PROFIT (DÜZELTİLMİŞ)"""
         try:
-            print(f"🎯 {symbol} Take Profit oluşturuluyor: {price}")
+            print(f"🎯 Take Profit oluşturuluyor: {price}")
             await self._rate_limit_delay()
             
             tp_order = await self.client.futures_create_order(
@@ -190,17 +259,44 @@ class SimpleBinanceClient:
                 quantity=quantity,
                 stopPrice=price,
                 timeInForce='GTE_GTC',
-                reduceOnly=True
+                reduceOnly=True,
+                closePosition=False
             )
             
             if tp_order and 'orderId' in tp_order:
-                print(f"✅ Take Profit başarılı: {price}")
-                return tp_order
-            return None
+                print(f"✅ Take Profit BAŞARILI: {price} (Order ID: {tp_order['orderId']})")
+                return True
+            
+            return False
+            
+        except BinanceAPIException as e:
+            print(f"❌ Take Profit API hatası: {e.code} - {e.message}")
+            return False
+        except Exception as e:
+            print(f"❌ Take Profit genel hatası: {e}")
+            return False
+
+    async def _emergency_close_position(
+        self, symbol: str, side: str, quantity: float
+    ):
+        """Acil pozisyon kapatma (korumasız pozisyonlar için)"""
+        try:
+            print(f"🚨 {symbol} ACİL KAPATILIYOR (korumasız pozisyon)")
+            await self._rate_limit_delay()
+            
+            close_order = await self.client.futures_create_order(
+                symbol=symbol,
+                side=side,
+                type='MARKET',
+                quantity=quantity,
+                reduceOnly=True
+            )
+            
+            if close_order:
+                print(f"✅ {symbol} pozisyon kapatıldı")
             
         except Exception as e:
-            print(f"❌ Take Profit hatası: {e}")
-            return None
+            print(f"❌ Acil kapatma hatası: {e}")
 
     async def get_symbol_info(self, symbol: str):
         """Symbol bilgilerini al"""
@@ -219,7 +315,7 @@ class SimpleBinanceClient:
             return None
             
         except Exception as e:
-            print(f"❌ {symbol} sembol bilgisi alınırken hata: {e}")
+            print(f"❌ {symbol} sembol bilgisi hatası: {e}")
             return None
         
     async def get_open_positions(self, symbol: str):
@@ -239,15 +335,18 @@ class SimpleBinanceClient:
             return []
 
     async def cancel_all_orders_safe(self, symbol: str):
-        """Güvenli emirlerin iptali"""
+        """Güvenli emir iptali"""
         try:
             await self._rate_limit_delay()
-            await self.client.futures_cancel_all_open_orders(symbol=symbol)
-            print(f"🗑️ {symbol} tüm açık emirler iptal edildi")
+            result = await self.client.futures_cancel_all_open_orders(symbol=symbol)
+            if result:
+                print(f"🗑️ {symbol} açık emirler iptal edildi")
             return True
                 
         except Exception as e:
-            print(f"❌ {symbol} emir iptali hatası: {e}")
+            # Zaten açık emir yoksa hata almayı görmezden gel
+            if "-2011" not in str(e):
+                print(f"⚠️ {symbol} emir iptali: {e}")
             return False
 
     async def get_market_price(self, symbol: str):
@@ -289,8 +388,8 @@ class SimpleBinanceClient:
             try:
                 await self._rate_limit_delay()
                 await self.client.futures_change_margin_type(symbol=symbol, marginType='CROSSED')
-            except BinanceAPIException as margin_error:
-                if "No need to change margin type" in str(margin_error):
+            except BinanceAPIException as e:
+                if "No need to change margin type" in str(e):
                     pass  # Zaten cross modunda
             
             # Kaldıracı ayarla
@@ -311,6 +410,7 @@ class SimpleBinanceClient:
         try:
             current_time = time.time()
             
+            # Cache kontrolü
             if current_time - self._last_balance_check < 30:
                 return self._cached_balance
             
@@ -335,15 +435,24 @@ class SimpleBinanceClient:
             print(f"❌ Bakiye sorgusu hatası: {e}")
             return self._cached_balance
 
+    def _get_precision(self, symbol_info: dict, filter_type: str, key: str) -> int:
+        """Precision hesaplama"""
+        try:
+            for f in symbol_info.get('filters', []):
+                if f.get('filterType') == filter_type:
+                    size_str = f.get(key, "")
+                    if '.' in str(size_str):
+                        return len(str(size_str).split('.')[1].rstrip('0'))
+            return 0
+        except:
+            return 0
+
     async def close(self):
         """Bağlantıyı kapat"""
         if self.client:
             try:
                 await self.client.close_connection()
                 self.client = None
-                print("✅ Basit Binance AsyncClient bağlantısı kapatıldı.")
+                print("✅ Binance AsyncClient bağlantısı kapatıldı.")
             except Exception as e:
                 print(f"⚠️ Bağlantı kapatılırken hata: {e}")
-
-# Global simple instance
-binance_client = SimpleBinanceClient()
