@@ -1,88 +1,175 @@
-# app/trading_strategy.py - SAF EMA CROSS STRATEJİSİ
+# app/trading_strategy.py - BOLLİNGER BANDS STRATEJİSİ
 
 import pandas as pd
 import numpy as np
-import warnings
+from typing import Dict, Optional
 from .config import settings
 
-warnings.filterwarnings("ignore")
-pd.set_option('future.no_silent_downcasting', True)
-
-class PureEMAStrategy:
+class PureEMAStrategy:  # İsim aynı kaldı - uyumluluk için
     """
-    📈 SAF EMA Cross Stratejisi
-    - Filtre YOK
-    - Sadece EMA9 ve EMA21 kesişimi
-    - Cooldown YOK
-    - Whipsaw koruması YOK
+    📊 Bollinger Bands Al-Sat Stratejisi
+    
+    Her dakika:
+    1. Bollinger Bantlarını hesapla
+    2. 1 LONG pozisyon aç (alt bantta alış)
+    3. 1 SHORT pozisyon aç (üst bantta satış)
+    4. Dinamik TP/SL (bant genişliğine göre)
     """
     
     def __init__(self):
-        self.ema_fast = settings.EMA_FAST_PERIOD
-        self.ema_slow = settings.EMA_SLOW_PERIOD
-        
-        # Tracking
+        self.bb_period = settings.BB_PERIOD
+        self.bb_std = settings.BB_STD_DEV
         self.analysis_count = 0
-        self.signal_count = {"LONG": 0, "SHORT": 0, "HOLD": 0}
+        self.successful_signals = 0
         
-        print(f"📈 SAF EMA CROSS: {self.ema_fast}/{self.ema_slow}")
-        print("✅ FİLTRE YOK - Saf EMA kesişimi")
-
+        print(f"📊 Bollinger Bands Stratejisi başlatıldı")
+        print(f"   Period: {self.bb_period}")
+        print(f"   Std Dev: {self.bb_std}")
+        print(f"   Timeframe: {settings.TIMEFRAME}")
+    
     def analyze_klines(self, klines: list, symbol: str = "UNKNOWN") -> str:
         """
-        📈 Saf EMA analizi - FİLTRE YOK
+        📊 Bollinger Bands analizi - Geriye uyumluluk için
         
         Returns: "LONG" | "SHORT" | "HOLD"
         """
+        analysis = self.analyze_and_calculate_levels(klines, symbol)
+        if analysis and analysis.get('should_trade'):
+            return "LONG"  # Her zaman pozisyon açmaya hazır
+        return "HOLD"
+    
+    def analyze_and_calculate_levels(self, klines: list, symbol: str = "UNKNOWN") -> Optional[Dict]:
+        """
+        📊 Bollinger Bands hesaplama ve giriş seviyelerini belirleme
+        
+        Returns:
+        {
+            "long_entry": float,
+            "short_entry": float,
+            "long_tp": float,
+            "long_sl": float,
+            "short_tp": float,
+            "short_sl": float,
+            "bb_upper": float,
+            "bb_middle": float,
+            "bb_lower": float,
+            "bb_width_percent": float,
+            "should_trade": bool
+        }
+        """
         self.analysis_count += 1
         
-        min_required = max(self.ema_slow + 5, 30)
+        # Minimum veri kontrolü
+        min_required = self.bb_period + 5
         if not klines or len(klines) < min_required:
-            return "HOLD"
+            if settings.DEBUG_MODE:
+                print(f"❌ {symbol}: Yetersiz veri ({len(klines) if klines else 0}/{min_required})")
+            return None
 
         try:
+            # DataFrame hazırla
             df = self._prepare_dataframe(klines)
             
             if df is None or len(df) < min_required:
-                return "HOLD"
+                return None
             
-            # EMA hesapla
-            df['ema_fast'] = df['close'].ewm(span=self.ema_fast, adjust=False).mean()
-            df['ema_slow'] = df['close'].ewm(span=self.ema_slow, adjust=False).mean()
+            # Bollinger Bands hesapla
+            df['bb_middle'] = df['close'].rolling(window=self.bb_period).mean()
+            df['bb_std'] = df['close'].rolling(window=self.bb_period).std()
+            df['bb_upper'] = df['bb_middle'] + (self.bb_std * df['bb_std'])
+            df['bb_lower'] = df['bb_middle'] - (self.bb_std * df['bb_std'])
             
             # NaN temizle
-            df['ema_fast'] = df['ema_fast'].fillna(df['close'])
-            df['ema_slow'] = df['ema_slow'].fillna(df['close'])
+            df = df.dropna().copy()
             
-            # Kesişim kontrolü
-            df['fast_above'] = df['ema_fast'] > df['ema_slow']
-            df['prev_fast_above'] = df['fast_above'].shift(1).fillna(False)
+            if len(df) < 1:
+                return None
             
-            # Cross detection
-            df['bullish_cross'] = (~df['prev_fast_above']) & df['fast_above']
-            df['bearish_cross'] = df['prev_fast_above'] & (~df['fast_above'])
-            
-            # Son mum
+            # Son değerler
             last_row = df.iloc[-1]
+            current_price = float(last_row['close'])
+            bb_upper = float(last_row['bb_upper'])
+            bb_middle = float(last_row['bb_middle'])
+            bb_lower = float(last_row['bb_lower'])
+            bb_width = bb_upper - bb_lower
+            bb_width_percent = (bb_width / current_price) * 100
             
-            if last_row['bullish_cross']:
-                signal = "LONG"
-                print(f"🚀 {symbol}: EMA BULLISH CROSS → LONG")
-            elif last_row['bearish_cross']:
-                signal = "SHORT"
-                print(f"📉 {symbol}: EMA BEARISH CROSS → SHORT")
+            if settings.DEBUG_MODE:
+                print(f"\n📊 {symbol} Bollinger Bands:")
+                print(f"   Üst Bant: {bb_upper:.4f}")
+                print(f"   Orta: {bb_middle:.4f}")
+                print(f"   Alt Bant: {bb_lower:.4f}")
+                print(f"   Genişlik: %{bb_width_percent:.3f}")
+                print(f"   Güncel Fiyat: {current_price:.4f}")
+            
+            # Giriş seviyeleri
+            # LONG: Alt banda yakın (alt bant + %10 yukarı)
+            long_entry = bb_lower + (bb_width * 0.1)
+            
+            # SHORT: Üst banda yakın (üst bant - %10 aşağı)
+            short_entry = bb_upper - (bb_width * 0.1)
+            
+            # Dinamik TP/SL hesaplama
+            tp_distance = bb_width * settings.TP_MULTIPLIER
+            sl_distance = bb_width * settings.SL_MULTIPLIER
+            
+            # TP/SL yüzdeleri
+            long_tp_percent = (tp_distance / long_entry)
+            long_sl_percent = (sl_distance / long_entry)
+            short_tp_percent = (tp_distance / short_entry)
+            short_sl_percent = (sl_distance / short_entry)
+            
+            # Min/Max sınırları uygula
+            long_tp_percent = max(settings.MIN_TP_PERCENT, min(settings.MAX_TP_PERCENT, long_tp_percent))
+            long_sl_percent = max(settings.MIN_SL_PERCENT, min(settings.MAX_SL_PERCENT, long_sl_percent))
+            short_tp_percent = max(settings.MIN_TP_PERCENT, min(settings.MAX_TP_PERCENT, short_tp_percent))
+            short_sl_percent = max(settings.MIN_SL_PERCENT, min(settings.MAX_SL_PERCENT, short_sl_percent))
+            
+            # LONG pozisyon seviyeleri
+            long_tp = long_entry * (1 + long_tp_percent)
+            long_sl = long_entry * (1 - long_sl_percent)
+            
+            # SHORT pozisyon seviyeleri
+            short_tp = short_entry * (1 - short_tp_percent)
+            short_sl = short_entry * (1 + short_sl_percent)
+            
+            if settings.DEBUG_MODE:
+                print(f"\n🎯 {symbol} Pozisyon Seviyeleri:")
+                print(f"   LONG Entry: {long_entry:.4f} | TP: {long_tp:.4f} (+%{long_tp_percent*100:.2f}) | SL: {long_sl:.4f} (-%{long_sl_percent*100:.2f})")
+                print(f"   SHORT Entry: {short_entry:.4f} | TP: {short_tp:.4f} (-%{short_tp_percent*100:.2f}) | SL: {short_sl:.4f} (+%{short_sl_percent*100:.2f})")
+            
+            # Trade yapmak için minimum genişlik kontrolü
+            should_trade = bb_width_percent > 0.1  # Minimum %0.1 genişlik
+            
+            if not should_trade:
+                print(f"⚠️ {symbol}: Bollinger bantları çok dar, trade yapılmıyor")
             else:
-                signal = "HOLD"
+                self.successful_signals += 1
             
-            self.signal_count[signal] += 1
-            
-            return signal
+            return {
+                "long_entry": long_entry,
+                "short_entry": short_entry,
+                "long_tp": long_tp,
+                "long_sl": long_sl,
+                "long_tp_percent": long_tp_percent,
+                "long_sl_percent": long_sl_percent,
+                "short_tp": short_tp,
+                "short_sl": short_sl,
+                "short_tp_percent": short_tp_percent,
+                "short_sl_percent": short_sl_percent,
+                "bb_upper": bb_upper,
+                "bb_middle": bb_middle,
+                "bb_lower": bb_lower,
+                "bb_width_percent": bb_width_percent,
+                "current_price": current_price,
+                "should_trade": should_trade
+            }
             
         except Exception as e:
-            print(f"❌ {symbol} EMA analiz hatası: {e}")
-            return "HOLD"
-
-    def _prepare_dataframe(self, klines: list) -> pd.DataFrame:
+            print(f"❌ {symbol} Bollinger analiz hatası: {e}")
+            return None
+    
+    def _prepare_dataframe(self, klines: list) -> Optional[pd.DataFrame]:
         """Kline verilerini DataFrame'e çevir"""
         try:
             klines_data = []
@@ -107,29 +194,48 @@ class PureEMAStrategy:
     def get_debug_info(self, klines: list, symbol: str) -> dict:
         """Debug bilgisi"""
         try:
-            df = self._prepare_dataframe(klines)
-            if df is None:
-                return {"error": "DataFrame oluşturulamadı"}
-            
-            df['ema_fast'] = df['close'].ewm(span=self.ema_fast, adjust=False).mean()
-            df['ema_slow'] = df['close'].ewm(span=self.ema_slow, adjust=False).mean()
-            df['ema_fast'] = df['ema_fast'].fillna(df['close'])
-            df['ema_slow'] = df['ema_slow'].fillna(df['close'])
-            
-            last_row = df.iloc[-1]
+            analysis = self.analyze_and_calculate_levels(klines, symbol)
+            if not analysis:
+                return {"error": "Analiz yapılamadı"}
             
             return {
                 "symbol": symbol,
-                "strategy": "pure_ema_cross",
-                "current_price": float(last_row['close']),
-                "ema_fast": float(last_row['ema_fast']),
-                "ema_slow": float(last_row['ema_slow']),
-                "fast_above_slow": bool(last_row['ema_fast'] > last_row['ema_slow']),
+                "strategy": "bollinger_bands",
+                "current_price": analysis['current_price'],
+                "bb_upper": analysis['bb_upper'],
+                "bb_middle": analysis['bb_middle'],
+                "bb_lower": analysis['bb_lower'],
+                "bb_width_percent": analysis['bb_width_percent'],
+                "long_entry": analysis['long_entry'],
+                "short_entry": analysis['short_entry'],
+                "should_trade": analysis['should_trade'],
                 "total_analysis": self.analysis_count,
-                "signal_count": self.signal_count
+                "successful_signals": self.successful_signals
             }
         except Exception as e:
             return {"error": f"Debug hatası: {str(e)}"}
+    
+    def get_debug_info_optimized(self, klines: list, symbol: str) -> dict:
+        """Geriye uyumluluk"""
+        return self.get_debug_info(klines, symbol)
+    
+    def get_strategy_status_optimized(self, symbol: str) -> dict:
+        """Strateji durumu"""
+        return {
+            "strategy_name": "Bollinger Bands Al-Sat",
+            "version": "1.0",
+            "bb_period": self.bb_period,
+            "bb_std_dev": self.bb_std,
+            "timeframe": settings.TIMEFRAME,
+            "position_size": f"{settings.POSITION_SIZE_USDT} USDT",
+            "leverage": f"{settings.LEVERAGE}x",
+            "total_analysis": self.analysis_count,
+            "successful_signals": self.successful_signals
+        }
+    
+    def get_strategy_info(self) -> Dict:
+        """Strateji bilgisi"""
+        return self.get_strategy_status_optimized("GLOBAL")
 
 # Global instance
 trading_strategy = PureEMAStrategy()
