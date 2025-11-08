@@ -9,7 +9,7 @@ import time
 
 from .config import settings
 from .firebase_manager import firebase_manager
-from .binance_client import binance_client
+from .binance_client import create_binance_client
 from .strategy import ScalpingStrategy
 from .fast_scalping_bot import create_bot
 
@@ -21,7 +21,8 @@ app = FastAPI(
     description="30 saniye ve 1 dakikalık agresif scalping - Sürekli trade"
 )
 
-# Bot instance'ını global olarak oluştur
+# Instance'ları global olarak oluştur
+binance_client = create_binance_client(settings)
 strategy = ScalpingStrategy(settings)
 fast_scalping_bot = create_bot(settings, binance_client, strategy, firebase_manager)
 
