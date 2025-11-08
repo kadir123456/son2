@@ -3,233 +3,487 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basit EMA Cross Bot v1.0 + 🤖 Gemini AI</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>📊 Bollinger Bands Al-Sat Bot</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --card-bg: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --primary: #238636;
+            --danger: #da3633;
+            --info: #1f6feb;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        
+        .container { max-width: 500px; width: 100%; }
+        
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(45deg, var(--primary), var(--info));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+        
+        input {
+            width: 100%;
+            padding: 0.7rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 1rem;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--info);
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-start {
+            background: var(--primary);
+            color: #fff;
+        }
+        
+        .btn-start:hover { background: #2ea043; }
+        
+        .btn-stop {
+            background: var(--danger);
+            color: #fff;
+        }
+        
+        .btn-stop:hover { background: #ff6b6b; }
+        
+        .btn:disabled {
+            background: #21262d;
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.5rem 1rem;
+        }
+        
+        .status-label {
+            color: var(--text-muted);
+        }
+        
+        .status-value {
+            text-align: right;
+            font-weight: 600;
+        }
+        
+        .status-running {
+            color: var(--primary);
+        }
+        
+        .status-stopped {
+            color: var(--danger);
+        }
+        
+        .error {
+            color: var(--danger);
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .info-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .info-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--info);
+            color: #fff;
+            margin-right: 0.5rem;
+        }
+        
+        #login-container { display: flex; }
+        #app-container { display: none; }
+        
+        .btn-logout {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+        
+        .btn-logout:hover {
+            background: var(--danger);
+            color: #fff;
+        }
+    </style>
 </head>
 <body>
-
+    <!-- Login -->
     <div id="login-container" class="container">
-        <div class="card login-card">
-            <h1>🎯 Basit EMA Cross Bot v1.0</h1>
-            <p class="subtitle">EMA 9/21 Kesişim Stratejisi + 🤖 Gemini AI</p>
+        <div class="card">
+            <h1>📊 Bollinger Bands Bot</h1>
+            <p class="subtitle">Her dakika 1 LONG + 1 SHORT pozisyon</p>
             <div class="form-group">
-                <label for="email">E-posta</label>
-                <input type="email" id="email" placeholder="ornek@mail.com" autocomplete="email">
+                <label>E-posta</label>
+                <input type="email" id="email" placeholder="ornek@mail.com">
             </div>
             <div class="form-group">
-                <label for="password">Şifre</label>
-                <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+                <label>Şifre</label>
+                <input type="password" id="password" placeholder="••••••••">
             </div>
-            <button id="login-button" class="btn btn-start">Giriş Yap</button>
-            <p id="login-error" class="error-message"></p>
+            <button id="login-btn" class="btn btn-start">Giriş Yap</button>
+            <p id="login-error" class="error"></p>
         </div>
     </div>
 
-    <div id="app-container" class="container" style="display: none;">
-        <header>
-            <h1>🎯 EMA Cross Bot + 🤖 AI</h1>
-            <div class="header-info">
-                <span class="badge">EMA 9/21</span>
-                <span class="badge">Gemini AI</span>
-            </div>
-            <button id="logout-button" class="btn btn-logout">Çıkış Yap</button>
-        </header>
-
-        <main>
-            <!-- STRATEJİ BİLGİSİ -->
-            <div class="card strategy-card">
-                <h2>📈 Strateji Bilgisi</h2>
-                <div class="strategy-info">
-                    <div class="strategy-item">
-                        <span class="strategy-icon">📈</span>
-                        <div>
-                            <div class="strategy-title">EMA Cross Sistemi</div>
-                            <div class="strategy-desc">EMA 9 yukarı kesince LONG, aşağı kesince SHORT</div>
-                        </div>
-                    </div>
-                    <div class="strategy-item">
-                        <span class="strategy-icon">🤖</span>
-                        <div>
-                            <div class="strategy-title">Gemini AI Doğrulama</div>
-                            <div class="strategy-desc">Google AI ile sinyal kalitesi kontrolü</div>
-                        </div>
-                    </div>
-                    <div class="strategy-item">
-                        <span class="strategy-icon">🎯</span>
-                        <div>
-                            <div class="strategy-title">Otomatik TP/SL</div>
-                            <div class="strategy-desc">Her pozisyona AI önerili kar al/zarar durdur</div>
-                        </div>
-                    </div>
+    <!-- App -->
+    <div id="app-container" class="container">
+        <button id="logout-btn" class="btn-logout">Çıkış</button>
+        
+        <div class="card">
+            <h1>📊 Bollinger Bands Bot</h1>
+            <p class="subtitle">Her dakika 1 LONG + 1 SHORT - 10 USDT sabit</p>
+            
+            <div class="info-box">
+                <div class="info-item">
+                    <span>📊 Strateji:</span>
+                    <span>Bollinger Bantları</span>
+                </div>
+                <div class="info-item">
+                    <span>⏰ Timeframe:</span>
+                    <span>1 dakika</span>
+                </div>
+                <div class="info-item">
+                    <span>💰 Pozisyon:</span>
+                    <span>10 USDT (sabit)</span>
+                </div>
+                <div class="info-item">
+                    <span>📈 Kaldıraç:</span>
+                    <span>10x</span>
                 </div>
             </div>
+        </div>
 
-            <!-- GEMİNİ AI STATUS -->
-            <div class="card gemini-card">
-                <h2>🤖 Gemini AI Durumu</h2>
-                <div class="gemini-status">
-                    <p>AI Status: <span id="gemini-status-text" class="status-value">Kontrol ediliyor...</span></p>
-                    <p>Provider: <span id="gemini-provider">-</span></p>
-                    <p>Cache: <span id="gemini-cache-size">0</span> kayıt</p>
-                </div>
+        <div class="card">
+            <h2>🎯 Bot Kontrol</h2>
+            <div class="form-group">
+                <label>Coin Sembolü</label>
+                <input type="text" id="symbol-input" placeholder="BTC, ETH, SOL...">
+            </div>
+            <button id="start-btn" class="btn btn-start">🚀 Bot Başlat</button>
+            <button id="stop-btn" class="btn btn-stop" disabled>🛑 Bot Durdur</button>
+        </div>
+
+        <div class="card">
+            <h2>📊 Bot Durumu</h2>
+            <div class="status-grid">
+                <span class="status-label">Durum:</span>
+                <span class="status-value" id="status-text">Başlatılmadı</span>
                 
-                <div class="form-group">
-                    <label for="gemini-test-symbol">🤖 AI Test için Coin</label>
-                    <input type="text" id="gemini-test-symbol" placeholder="Örn: BTC">
-                </div>
+                <span class="status-label">Coin:</span>
+                <span class="status-value" id="status-symbol">-</span>
                 
-                <div class="button-group">
-                    <button id="gemini-test-button" class="btn btn-info">🤖 Gemini AI Test</button>
-                    <button id="gemini-status-button" class="btn btn-secondary">📊 AI Durum</button>
-                    <button id="gemini-clear-cache-button" class="btn btn-warning">🧹 Cache Temizle</button>
-                </div>
+                <span class="status-label">Toplam İşlem:</span>
+                <span class="status-value" id="status-trades">0</span>
                 
-                <div id="gemini-results" class="gemini-results" style="display: none;">
-                    <h3>🤖 AI Analiz Sonucu</h3>
-                    <div id="gemini-output" class="debug-output"></div>
-                </div>
-            </div>
-
-            <!-- CÜZDAN DURUMU -->
-            <div class="card status-card">
-                <h2>💰 Cüzdan Durumu</h2>
-                <div class="stats-grid">
-                    <p class="stats-label">Ana Bakiye (USDT):</p>
-                    <p class="stats-value" id="stats-main-balance">Yükleniyor...</p>
-                    <p class="stats-label">Aktif Pozisyon P&L:</p>
-                    <p class="stats-value" id="stats-position-pnl">Yükleniyor...</p>
-                    <p class="stats-label">İşlem Miktarı (USDT):</p>
-                    <p class="stats-value" id="stats-order-size">Yükleniyor...</p>
-                </div>
-            </div>
-
-            <!-- BOT DURUMU -->
-            <div class="card status-card">
-                <h2>🤖 Bot Durumu</h2>
-                <div class="status-grid">
-                    <p class="status-label">Durum:</p>
-                    <p class="status-value"><span id="status-message">Bot başlatılmadı.</span></p>
-                    <p class="status-label">İzlenen Coinler:</p>
-                    <p class="status-value"><span id="monitored-symbols">Hayır</span></p>
-                    <p class="status-label">Aktif Pozisyon:</p>
-                    <p class="status-value"><span id="active-position">Hayır</span></p>
-                    <p class="status-label">WebSocket Bağlantıları:</p>
-                    <p class="status-value"><span id="websocket-count">0</span></p>
-                    <p class="status-label">Son Güncelleme:</p>
-                    <p class="status-value"><span id="last-update">-</span></p>
-                </div>
-            </div>
-
-            <!-- COİN YÖNETİMİ -->
-            <div class="card controls-card">
-                <h2>🎯 Multi-Coin Bot Yönetimi</h2>
+                <span class="status-label">Başarılı:</span>
+                <span class="status-value status-running" id="status-success">0</span>
                 
-                <div class="form-group">
-                    <label for="multi-symbols-input">İzlenecek Coinler (maksimum 10)</label>
-                    <input type="text" id="multi-symbols-input" placeholder="BTC, ETH, ADA, SOL, DOT" 
-                           title="Virgülle ayırarak maksimum 10 coin girin">
-                </div>
+                <span class="status-label">Başarısız:</span>
+                <span class="status-value status-stopped" id="status-failed">0</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💰 Hesap Bilgileri</h2>
+            <div class="status-grid">
+                <span class="status-label">Bakiye:</span>
+                <span class="status-value" id="account-balance">-</span>
                 
-                <div class="button-group">
-                    <button id="multi-start-button" class="btn btn-start">🚀 Multi-Coin Bot Başlat</button>
-                    <button id="stop-button" class="btn btn-stop" disabled>🛑 Bot Durdur</button>
-                    <button id="refresh-button" class="btn btn-info">🔄 Manuel Yenile</button>
-                </div>
-
-                <div class="strategy-settings">
-                    <h3>⚙️ Strateji Ayarları</h3>
-                    <div class="settings-grid">
-                        <div class="setting-item">
-                            <span class="setting-label">EMA Hızlı:</span>
-                            <span class="setting-value">9</span>
-                        </div>
-                        <div class="setting-item">
-                            <span class="setting-label">EMA Yavaş:</span>
-                            <span class="setting-value">21</span>
-                        </div>
-                        <div class="setting-item">
-                            <span class="setting-label">Timeframe:</span>
-                            <span class="setting-value">15m</span>
-                        </div>
-                        <div class="setting-item">
-                            <span class="setting-label">Kaldıraç:</span>
-                            <span class="setting-value">10x</span>
-                        </div>
-                        <div class="setting-item">
-                            <span class="setting-label">Stop Loss:</span>
-                            <span class="setting-value">0.8%</span>
-                        </div>
-                        <div class="setting-item">
-                            <span class="setting-label">Take Profit:</span>
-                            <span class="setting-value">1.5%</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- İZLENEN COİNLER LİSTESİ -->
-            <div class="card symbols-card" id="symbols-card" style="display: none;">
-                <h2>📊 İzlenen Coinler & EMA Sinyalleri</h2>
-                <div id="symbols-list" class="symbols-grid">
-                    <!-- Dinamik olarak doldurulacak -->
-                </div>
-            </div>
-
-            <!-- POZİSYON KORUMASI -->
-            <div class="card controls-card">
-                <h2>🛡️ Pozisyon Koruması</h2>
-                <p class="subtitle">Açık pozisyonlar için otomatik TP/SL koruması</p>
+                <span class="status-label">Açık Pozisyon:</span>
+                <span class="status-value" id="open-positions">0</span>
                 
-                <div class="button-group">
-                    <button id="scan-all-button" class="btn btn-info">🔍 Tüm Pozisyonları Tara</button>
-                    <button id="monitor-toggle-button" class="btn btn-secondary">📊 TP/SL Monitor</button>
-                </div>
-                
-                <div class="form-group">
-                    <label for="scan-symbol-input">Coin Kontrolü</label>
-                    <input type="text" id="scan-symbol-input" placeholder="Örn: BTCUSDT">
-                </div>
-                <button id="scan-symbol-button" class="btn btn-info">🎯 Coin Kontrol Et</button>
+                <span class="status-label">Toplam PnL:</span>
+                <span class="status-value" id="total-pnl">0 USDT</span>
             </div>
-
-            <!-- İSTATİSTİKLER -->
-            <div class="card stats-card">
-                <h2>📊 İşlem İstatistikleri</h2>
-                <div class="stats-grid">
-                    <p class="stats-label">Toplam İşlem:</p>
-                    <p class="stats-value" id="stats-total-trades">0</p>
-                    <p class="stats-label">Başarılı İşlem:</p>
-                    <p class="stats-value" id="stats-winning-trades">0</p>
-                    <p class="stats-label">Başarısız İşlem:</p>
-                    <p class="stats-value" id="stats-losing-trades">0</p>
-                    <p class="stats-label">Başarı Oranı:</p>
-                    <p class="stats-value" id="stats-win-rate">-%</p>
-                </div>
-            </div>
-
-            <!-- SINGLE COİN MODU -->
-            <div class="card controls-card legacy-card">
-                <h2>🔄 Tek Coin Modu</h2>
-                <p class="subtitle">Geriye uyumluluk - tek coin ile bot başlat</p>
-                <div class="form-group">
-                    <label for="single-symbol-input">Tek Coin Sembolü</label>
-                    <input type="text" id="single-symbol-input" placeholder="Örn: BTCUSDT">
-                </div>
-                <div class="button-group">
-                    <button id="single-start-button" class="btn btn-secondary">🔄 Tek Coin Başlat</button>
-                </div>
-            </div>
-
-        </main>
+            <button id="refresh-account" class="btn btn-start" style="margin-top: 1rem;">🔄 Hesap Yenile</button>
+        </div>
     </div>
 
-    <!-- Firebase ve Script.js yükleme -->
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.6.1/firebase-database.js"></script>
-    <script src="/static/script.js"></script>
+    
+    <script>
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDkJch-8B46dpZSB-pMSR4q1uvzadCVekE",
+            authDomain: "aviator-90c8b.firebaseapp.com",
+            databaseURL: "https://aviator-90c8b-default-rtdb.firebaseio.com",
+            projectId: "aviator-90c8b",
+            storageBucket: "aviator-90c8b.appspot.com",
+            messagingSenderId: "823763988442",
+            appId: "1:823763988442:web:16a797275675a219c3dae3"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // Elements
+        const loginContainer = document.getElementById('login-container');
+        const appContainer = document.getElementById('app-container');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginError = document.getElementById('login-error');
+        
+        const symbolInput = document.getElementById('symbol-input');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        
+        const statusText = document.getElementById('status-text');
+        const statusSymbol = document.getElementById('status-symbol');
+        const statusTrades = document.getElementById('status-trades');
+        const statusSuccess = document.getElementById('status-success');
+        const statusFailed = document.getElementById('status-failed');
+        
+        const accountBalance = document.getElementById('account-balance');
+        const openPositions = document.getElementById('open-positions');
+        const totalPnl = document.getElementById('total-pnl');
+        const refreshAccountBtn = document.getElementById('refresh-account');
+
+        let statusInterval;
+
+        // Auth
+        loginBtn.addEventListener('click', () => {
+            loginError.textContent = "";
+            auth.signInWithEmailAndPassword(emailInput.value, passwordInput.value)
+                .catch(error => { 
+                    loginError.textContent = "Hatalı e-posta veya şifre"; 
+                });
+        });
+
+        logoutBtn.addEventListener('click', () => auth.signOut());
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                loginContainer.style.display = 'none';
+                appContainer.style.display = 'block';
+                console.log('✅ Giriş:', user.email);
+                startStatusUpdates();
+            } else {
+                loginContainer.style.display = 'flex';
+                appContainer.style.display = 'none';
+                stopStatusUpdates();
+            }
+        });
+
+        // API functions
+        async function fetchApi(endpoint, options = {}) {
+            const user = auth.currentUser;
+            if (!user) return null;
+            
+            try {
+                const idToken = await user.getIdToken(true);
+                const headers = { 
+                    ...options.headers, 
+                    'Authorization': `Bearer ${idToken}` 
+                };
+                
+                if (options.body) {
+                    headers['Content-Type'] = 'application/json';
+                }
+                
+                const response = await fetch(endpoint, { ...options, headers });
+                
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ detail: response.statusText }));
+                    throw new Error(error.detail);
+                }
+                
+                return response.json();
+            } catch (error) {
+                console.error("API hatası:", error);
+                alert(error.message);
+                return null;
+            }
+        }
+
+        // Start bot
+        startBtn.addEventListener('click', async () => {
+            const symbol = symbolInput.value.trim().toUpperCase();
+            if (!symbol) {
+                alert('Coin sembolü girin');
+                return;
+            }
+            
+            startBtn.disabled = true;
+            const result = await fetchApi('/api/start', {
+                method: 'POST',
+                body: JSON.stringify({ symbol })
+            });
+            
+            if (result && result.success) {
+                alert(`Bot ${symbol} için başlatıldı!`);
+                setTimeout(getStatus, 2000);
+            }
+            
+            startBtn.disabled = false;
+        });
+
+        // Stop bot
+        stopBtn.addEventListener('click', async () => {
+            if (!confirm('Bot durdurulsun mu?')) return;
+            
+            stopBtn.disabled = true;
+            const result = await fetchApi('/api/stop', { method: 'POST' });
+            
+            if (result && result.success) {
+                alert('Bot durduruldu');
+                await getStatus();
+            }
+            
+            stopBtn.disabled = false;
+        });
+
+        // Get status
+        async function getStatus() {
+            const result = await fetchApi('/api/status');
+            if (!result) return;
+            
+            statusText.textContent = result.status_message || 'Bilinmiyor';
+            statusText.className = result.is_running ? 'status-value status-running' : 'status-value status-stopped';
+            
+            statusSymbol.textContent = result.symbol || '-';
+            statusTrades.textContent = result.total_trades || 0;
+            statusSuccess.textContent = result.successful_trades || 0;
+            statusFailed.textContent = result.failed_trades || 0;
+            
+            startBtn.disabled = result.is_running;
+            stopBtn.disabled = !result.is_running;
+        }
+
+        // Get account
+        refreshAccountBtn.addEventListener('click', async () => {
+            refreshAccountBtn.disabled = true;
+            refreshAccountBtn.textContent = 'Yükleniyor...';
+            
+            const result = await fetchApi('/api/account-info');
+            
+            if (result) {
+                accountBalance.textContent = `${result.account_balance.toFixed(2)} USDT`;
+                openPositions.textContent = result.open_positions_count || 0;
+                
+                const pnl = result.total_pnl || 0;
+                totalPnl.textContent = `${pnl.toFixed(2)} USDT`;
+                totalPnl.className = pnl > 0 ? 'status-value status-running' : 
+                                     pnl < 0 ? 'status-value status-stopped' : 'status-value';
+            }
+            
+            refreshAccountBtn.disabled = false;
+            refreshAccountBtn.textContent = '🔄 Hesap Yenile';
+        });
+
+        // Status updates
+        function startStatusUpdates() {
+            stopStatusUpdates();
+            getStatus();
+            statusInterval = setInterval(getStatus, 45000); // 45 saniye
+        }
+
+        function stopStatusUpdates() {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+        }
+
+        console.log('📊 Bollinger Bands Bot UI yüklendi!');
+    </script>
 </body>
 </html>
