@@ -10,7 +10,7 @@ import time
 from .config import settings
 from .firebase_manager import firebase_manager
 from .binance_client import create_binance_client
-from .strategy import ScalpingStrategy
+from .fast_scalping_strategy import FastScalpingStrategy
 from .fast_scalping_bot import create_bot
 
 bearer_scheme = HTTPBearer()
@@ -23,7 +23,7 @@ app = FastAPI(
 
 # Instance'ları global olarak oluştur
 binance_client = create_binance_client(settings)
-strategy = ScalpingStrategy(settings)
+strategy = FastScalpingStrategy()
 fast_scalping_bot = create_bot(settings, binance_client, strategy, firebase_manager)
 
 
