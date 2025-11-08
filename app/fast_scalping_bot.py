@@ -289,6 +289,16 @@ class OptimizedScalpingBot:
             print(f"💰 Bakiye: {balance:.2f} USDT")
             print(f"💼 Pozisyon Boyutu: {position_size} USDT")
             
+            # ÖNEMLİ: Açık pozisyon kontrolü
+            print(f"🔍 {symbol} açık pozisyon kontrolü...")
+            open_positions = await self.binance_client.get_open_positions(symbol)
+            if open_positions:
+                print(f"⚠️ {symbol} için zaten açık pozisyon var!")
+                print(f"   Miktar: {abs(float(open_positions[0]['positionAmt']))}")
+                print(f"   Giriş: {float(open_positions[0]['entryPrice'])}")
+                print(f"   PnL: {float(open_positions[0]['unRealizedProfit']):.2f} USDT")
+                return
+            
             # Quantity hesapla
             entry_price = analysis['entry_price']
             quantity = (position_size * self.settings.LEVERAGE) / entry_price
