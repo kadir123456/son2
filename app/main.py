@@ -1,3 +1,5 @@
+# app/main.py - HIZLI SCALPING BOT API
+
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.security import HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -5,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import time
 
-from .bollinger_bot_core import bollinger_bot
+from .fast_scalping_bot import fast_scalping_bot
 from .config import settings
 from .firebase_manager import firebase_manager
 from .binance_client import binance_client
@@ -13,24 +15,25 @@ from .binance_client import binance_client
 bearer_scheme = HTTPBearer()
 
 app = FastAPI(
-    title="Bollinger Bands Al-Sat Bot",
+    title="Hızlı Scalping Bot",
     version="1.0.0",
-    description="Her dakika 1 LONG + 1 SHORT - Bollinger Bantları Stratejisi"
+    description="30 saniye ve 1 dakikalık agresif scalping - Sürekli trade"
 )
 
 
 # ===================== STARTUP =====================
 @app.on_event("startup")
 async def startup_event():
-    """✅ Bollinger Bands Bot başlangıcı"""
-    print("🚀 Bollinger Bands Al-Sat Bot başlatılıyor...")
+    """✅ Hızlı Scalping Bot başlangıcı"""
+    print("🚀 Hızlı Scalping Bot başlatılıyor...")
     print("=" * 70)
-    print("📊 STRATEJİ: Her dakika 1 LONG + 1 SHORT")
-    print("💰 POZİSYON: Sabit 10 USDT")
-    print("📈 BOLLINGER: 20 period, 2.0 std dev")
+    print("⚡ STRATEJİ: Sürekli agresif scalping")
+    print("💰 POZİSYON: 10 USDT sabit")
+    print("📈 KALDIRAÇ: 15x")
     print("⏰ TIMEFRAME: 1 dakika")
+    print("🎯 TP: %0.4 | SL: %0.2")
     print("=" * 70)
-
+    
     if settings.validate_settings():
         settings.print_settings()
         print("✅ Tüm ayarlar geçerli - Bot hazır!")
@@ -43,8 +46,8 @@ async def startup_event():
 async def shutdown_event():
     """Kapatma"""
     try:
-        if bollinger_bot.status["is_running"]:
-            await bollinger_bot.stop()
+        if fast_scalping_bot.status["is_running"]:
+            await fast_scalping_bot.stop()
         await binance_client.close()
         print("✅ Bot güvenli kapatıldı")
     except Exception as e:
@@ -75,35 +78,36 @@ async def start_bot(
     background_tasks: BackgroundTasks,
     user: dict = Depends(authenticate)
 ):
-    """📊 Bollinger Bot başlatma"""
+    """⚡ Hızlı Scalping Bot başlatma"""
     try:
-        if bollinger_bot.status["is_running"]:
+        if fast_scalping_bot.status["is_running"]:
             raise HTTPException(status_code=400, detail="Bot zaten çalışıyor")
-
+        
         symbol = request.symbol.upper().strip()
         if not symbol:
             raise HTTPException(status_code=400, detail="Symbol gerekli")
-
+        
         user_email = user.get('email', 'anonymous')
         print(f"👤 {user_email} botu başlatıyor: {symbol}")
-
+        
         # Background task ile başlat
-        background_tasks.add_task(bollinger_bot.start, symbol)
-
+        background_tasks.add_task(fast_scalping_bot.start, symbol)
+        
         return JSONResponse({
             "success": True,
-            "message": f"Bollinger Bot {symbol} için başlatılıyor...",
+            "message": f"Hızlı Scalping Bot {symbol} için başlatılıyor...",
             "symbol": symbol,
             "user": user_email,
-            "strategy": "Bollinger Bands Dual Position",
+            "strategy": "Fast Scalping - No Filters",
             "info": {
-                "position_size": f"{settings.POSITION_SIZE_USDT} USDT",
-                "leverage": f"{settings.LEVERAGE}x",
-                "timeframe": settings.TIMEFRAME,
-                "bb_period": settings.BB_PERIOD
+                "position_size": "10 USDT",
+                "leverage": "15x",
+                "timeframe": "1m",
+                "tp": "%0.4",
+                "sl": "%0.2"
             }
         })
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -114,17 +118,17 @@ async def start_bot(
 async def stop_bot(user: dict = Depends(authenticate)):
     """🛑 Bot durdurma"""
     try:
-        if not bollinger_bot.status["is_running"]:
+        if not fast_scalping_bot.status["is_running"]:
             raise HTTPException(status_code=400, detail="Bot zaten durdurulmuş")
-
-        await bollinger_bot.stop()
-
+        
+        await fast_scalping_bot.stop()
+        
         return JSONResponse({
             "success": True,
             "message": "Bot durduruldu",
             "user": user.get('email', 'anonymous')
         })
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -135,7 +139,7 @@ async def stop_bot(user: dict = Depends(authenticate)):
 async def get_status(user: dict = Depends(authenticate)):
     """📊 Bot durumu"""
     try:
-        status = bollinger_bot.get_status()
+        status = fast_scalping_bot.get_status()
         return JSONResponse(status)
     except Exception as e:
         return JSONResponse({
@@ -149,18 +153,20 @@ async def get_status(user: dict = Depends(authenticate)):
 async def health_check():
     """🏥 Sağlık kontrolü"""
     try:
-        status = bollinger_bot.get_status()
+        status = fast_scalping_bot.get_status()
         return JSONResponse({
             "status": "healthy",
             "bot_running": status["is_running"],
-            "strategy": "Bollinger Bands Dual Position",
+            "strategy": "Fast Scalping",
             "version": "1.0.0",
             "timestamp": time.time(),
             "config": {
                 "environment": settings.ENVIRONMENT,
-                "timeframe": settings.TIMEFRAME,
-                "position_size": f"{settings.POSITION_SIZE_USDT} USDT",
-                "leverage": f"{settings.LEVERAGE}x"
+                "timeframe": "1m",
+                "position_size": "10 USDT",
+                "leverage": "15x",
+                "tp": "%0.4",
+                "sl": "%0.2"
             }
         })
     except Exception as e:
@@ -171,27 +177,26 @@ async def health_check():
         }, status_code=503)
 
 
-# ===================== HESAP BİLGİLERİ =====================
 @app.get("/api/account-info")
 async def get_account_info(user: dict = Depends(authenticate)):
     """💰 Hesap bilgileri"""
     try:
         if not binance_client.client:
             await binance_client.initialize()
-
+        
         balance = await binance_client.get_account_balance()
-
+        
         await binance_client._rate_limit_delay()
         all_positions = await binance_client.client.futures_position_information()
         open_positions = [p for p in all_positions if float(p['positionAmt']) != 0]
-
+        
         position_summary = []
         total_pnl = 0.0
-
+        
         for pos in open_positions:
             pnl = float(pos['unRealizedProfit'])
             total_pnl += pnl
-
+            
             position_summary.append({
                 "symbol": pos['symbol'],
                 "side": "LONG" if float(pos['positionAmt']) > 0 else "SHORT",
@@ -200,7 +205,7 @@ async def get_account_info(user: dict = Depends(authenticate)):
                 "mark_price": float(pos['markPrice']),
                 "pnl": pnl
             })
-
+        
         return JSONResponse({
             "account_balance": balance,
             "total_pnl": total_pnl,
@@ -209,7 +214,7 @@ async def get_account_info(user: dict = Depends(authenticate)):
             "user": user.get('email', 'anonymous'),
             "timestamp": time.time()
         })
-
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -229,7 +234,7 @@ async def exception_handler(request, exc):
     """Global hata yakalama"""
     error_msg = str(exc)
     print(f"❌ Global hata: {error_msg}")
-
+    
     return JSONResponse({
         "error": "Bot hatası",
         "detail": error_msg,
@@ -237,5 +242,5 @@ async def exception_handler(request, exc):
     }, status_code=500)
 
 
-print("✅ Bollinger Bands Bot API yüklendi!")
-print("📊 Strateji: Her dakika 1 LONG + 1 SHORT pozisyon")
+print("✅ Hızlı Scalping Bot API yüklendi!")
+print("⚡ Strateji: Sürekli agresif scalping - Filtre YOK!")
