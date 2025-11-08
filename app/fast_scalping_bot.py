@@ -403,3 +403,15 @@ class OptimizedScalpingBot:
             await self.binance_client.close()
         except:
             pass
+
+
+# ÖNEMLİ: main.py'nin import edebilmesi için bot instance'ı oluştur
+# Bu satır main.py'deki "from .fast_scalping_bot import fast_scalping_bot" import'unu çözer
+fast_scalping_bot = None  # Bot başlatıldığında doldurulacak
+
+
+def create_bot(settings, binance_client, strategy, firebase_manager):
+    """Bot instance'ı oluştur"""
+    global fast_scalping_bot
+    fast_scalping_bot = OptimizedScalpingBot(settings, binance_client, strategy, firebase_manager)
+    return fast_scalping_bot
