@@ -37,7 +37,7 @@ class SimpleEMACrossSettings:  # İsim aynı kaldı - uyumluluk için
     POSITION_SIZE_USDT: float = 10.0  # Sabit 10 USDT
     LEVERAGE: int = 10                 # 10x kaldıraç
     MAX_POSITION_SIZE_PERCENT: float = 0.90  # Kullanılmıyor artık
-    MIN_BALANCE_USDT: float = 50.0
+    MIN_BALANCE_USDT: float = 5
     
     # --- 🎯 TP/SL Ayarları (Dinamik - Bollinger genişliğine göre) ---
     TP_MULTIPLIER: float = 0.5    # TP = Bollinger genişliği * 0.5
