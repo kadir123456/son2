@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class BollingerBandsSettings:
+class SimpleEMACrossSettings:  # İsim aynı kaldı - uyumluluk için
     """
     📊 Bollinger Bands 1 Dakikalık Strateji
     - Her dakika 1 LONG + 1 SHORT pozisyon
@@ -29,9 +29,15 @@ class BollingerBandsSettings:
     BB_STD_DEV: float = 2.0       # Standart sapma çarpanı
     TIMEFRAME: str = "1m"         # Sabit 1 dakika
     
+    # Eski EMA parametreleri - geriye uyumluluk (kullanılmıyor)
+    EMA_FAST_PERIOD: int = 9
+    EMA_SLOW_PERIOD: int = 21
+    
     # --- 💰 Pozisyon Ayarları ---
     POSITION_SIZE_USDT: float = 10.0  # Sabit 10 USDT
     LEVERAGE: int = 10                 # 10x kaldıraç
+    MAX_POSITION_SIZE_PERCENT: float = 0.90  # Kullanılmıyor artık
+    MIN_BALANCE_USDT: float = 50.0
     
     # --- 🎯 TP/SL Ayarları (Dinamik - Bollinger genişliğine göre) ---
     TP_MULTIPLIER: float = 0.5    # TP = Bollinger genişliği * 0.5
@@ -45,6 +51,10 @@ class BollingerBandsSettings:
     MAX_TP_PERCENT: float = 0.015  # %1.5
     MAX_SL_PERCENT: float = 0.010  # %1.0
     
+    # Eski TP/SL - geriye uyumluluk (kullanılmıyor)
+    STOP_LOSS_PERCENT: float = 0.008
+    TAKE_PROFIT_PERCENT: float = 0.015
+    
     # --- 🚀 API Rate Limiting ---
     API_CALL_DELAY: float = 0.1  # 100ms
     MAX_REQUESTS_PER_SECOND: int = 10
@@ -54,7 +64,11 @@ class BollingerBandsSettings:
     WEBSOCKET_PING_TIMEOUT: int = 15
     WEBSOCKET_CLOSE_TIMEOUT: int = 10
     
-    # --- 📊 Veri Yönetimi ---
+    # --- 📊 Multi-Coin Tarama (kullanılmıyor artık) ---
+    MAX_COINS: int = 1
+    MAX_CONCURRENT_POSITIONS: int = 1
+    
+    # --- 💾 Memory Management ---
     MAX_KLINES_PER_SYMBOL: int = 30  # Sadece 30 mum yeterli
     STATUS_UPDATE_INTERVAL: int = 30
     
@@ -62,6 +76,15 @@ class BollingerBandsSettings:
     DEBUG_MODE: bool = True
     TEST_MODE: bool = False
     VERBOSE_LOGGING: bool = True
+    
+    # --- Geriye uyumluluk metodları ---
+    @classmethod
+    def get_tp_sl(cls, timeframe: str = None):
+        """Eski format için uyumluluk"""
+        return {
+            "tp_percent": cls.TAKE_PROFIT_PERCENT,
+            "sl_percent": cls.STOP_LOSS_PERCENT
+        }
     
     @classmethod
     def validate_settings(cls):
@@ -100,9 +123,39 @@ class BollingerBandsSettings:
         print("=" * 70)
         print("✅ HER DAKİKA 1 LONG + 1 SHORT POZİSYON")
         print("=" * 70)
+    
+    @classmethod
+    def validate_settings_optimized(cls):
+        """Geriye uyumluluk"""
+        return cls.validate_settings()
+    
+    @classmethod
+    def print_settings_optimized(cls):
+        """Geriye uyumluluk"""
+        return cls.print_settings()
+    
+    @classmethod
+    def get_trading_config(cls):
+        """Trading config"""
+        return {
+            "strategy": "bollinger_bands",
+            "timeframe": cls.TIMEFRAME,
+            "bb_period": cls.BB_PERIOD,
+            "bb_std": cls.BB_STD_DEV,
+            "position_size": cls.POSITION_SIZE_USDT,
+            "leverage": cls.LEVERAGE
+        }
+    
+    @classmethod
+    def get_api_rate_config(cls):
+        """API config"""
+        return {
+            "delay": cls.API_CALL_DELAY,
+            "max_per_second": cls.MAX_REQUESTS_PER_SECOND
+        }
 
 # Global settings instance
-settings = BollingerBandsSettings()
+settings = SimpleEMACrossSettings()
 
 if __name__ == "__main__":
     if settings.validate_settings():
