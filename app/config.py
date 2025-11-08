@@ -1,16 +1,16 @@
-# app/config.py - SAF EMA CROSS BOT AYARLARI
+# app/config.py - BOLLİNGER BANDS STRATEJİSİ
 
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class SimpleEMACrossSettings:
+class BollingerBandsSettings:
     """
-    📈 SAF EMA CROSS Trading Bot Ayarları
-    - Filtre yok, sadece EMA kesişimi
-    - Çoklu zaman dilimi desteği
-    - Otomatik TP/SL (zaman dilimine göre)
+    📊 Bollinger Bands 1 Dakikalık Strateji
+    - Her dakika 1 LONG + 1 SHORT pozisyon
+    - Sabit 10 USDT işlem boyutu
+    - Bantlar arası al-sat
     """
     
     # --- Temel Ayarlar ---
@@ -24,49 +24,38 @@ class SimpleEMACrossSettings:
     FIREBASE_CREDENTIALS_JSON: str = os.getenv("FIREBASE_CREDENTIALS_JSON")
     FIREBASE_DATABASE_URL: str = os.getenv("FIREBASE_DATABASE_URL")
 
-    # --- 📈 EMA Parametreleri ---
-    EMA_FAST_PERIOD: int = 9
-    EMA_SLOW_PERIOD: int = 21
+    # --- 📊 Bollinger Bands Parametreleri ---
+    BB_PERIOD: int = 20           # Bollinger period
+    BB_STD_DEV: float = 2.0       # Standart sapma çarpanı
+    TIMEFRAME: str = "1m"         # Sabit 1 dakika
     
-    # --- ⏰ Zaman Dilimi (Kullanıcı Seçimi) ---
-    TIMEFRAME: str = "15m"  # Varsayılan, UI'den değiştirilebilir
-    AVAILABLE_TIMEFRAMES = ["1m", "3m", "5m", "15m", "1h"]
+    # --- 💰 Pozisyon Ayarları ---
+    POSITION_SIZE_USDT: float = 10.0  # Sabit 10 USDT
+    LEVERAGE: int = 10                 # 10x kaldıraç
     
-    # --- 💰 Kaldıraç ve Pozisyon ---
-    LEVERAGE: int = 10  # Sabit 10x
-    MAX_POSITION_SIZE_PERCENT: float = 0.90  # %90 bakiye kullanımı
-    MIN_BALANCE_USDT: float = 50.0
+    # --- 🎯 TP/SL Ayarları (Dinamik - Bollinger genişliğine göre) ---
+    TP_MULTIPLIER: float = 0.5    # TP = Bollinger genişliği * 0.5
+    SL_MULTIPLIER: float = 0.3    # SL = Bollinger genişliği * 0.3
     
-    # --- 🎯 TP/SL Ayarları (Zaman Dilimine Göre) ---
-    TP_SL_SETTINGS = {
-        "1m": {"tp_percent": 0.010, "sl_percent": 0.005},   # TP: %1.0, SL: %0.5
-        "3m": {"tp_percent": 0.015, "sl_percent": 0.008},   # TP: %1.5, SL: %0.8
-        "5m": {"tp_percent": 0.020, "sl_percent": 0.010},   # TP: %2.0, SL: %1.0
-        "15m": {"tp_percent": 0.030, "sl_percent": 0.015},  # TP: %3.0, SL: %1.5
-        "1h": {"tp_percent": 0.050, "sl_percent": 0.025},   # TP: %5.0, SL: %2.5
-    }
+    # Minimum TP/SL (güvenlik için)
+    MIN_TP_PERCENT: float = 0.003  # %0.3
+    MIN_SL_PERCENT: float = 0.002  # %0.2
     
-    # Dinamik TP/SL alma
-    @classmethod
-    def get_tp_sl(cls, timeframe: str = None):
-        tf = timeframe or cls.TIMEFRAME
-        return cls.TP_SL_SETTINGS.get(tf, cls.TP_SL_SETTINGS["15m"])
+    # Maksimum TP/SL (aşırı geniş bantlarda)
+    MAX_TP_PERCENT: float = 0.015  # %1.5
+    MAX_SL_PERCENT: float = 0.010  # %1.0
     
     # --- 🚀 API Rate Limiting ---
-    API_CALL_DELAY: float = 0.08  # 80ms = ~12.5 request/second
-    MAX_REQUESTS_PER_SECOND: int = 12
+    API_CALL_DELAY: float = 0.1  # 100ms
+    MAX_REQUESTS_PER_SECOND: int = 10
     
     # --- 🌐 WebSocket Ayarları ---
     WEBSOCKET_PING_INTERVAL: int = 30
     WEBSOCKET_PING_TIMEOUT: int = 15
     WEBSOCKET_CLOSE_TIMEOUT: int = 10
     
-    # --- 📊 Multi-Coin Tarama ---
-    MAX_COINS: int = 100
-    MAX_CONCURRENT_POSITIONS: int = 1  # Aynı anda 1 pozisyon
-    
-    # --- 💾 Memory Management ---
-    MAX_KLINES_PER_SYMBOL: int = 50
+    # --- 📊 Veri Yönetimi ---
+    MAX_KLINES_PER_SYMBOL: int = 30  # Sadece 30 mum yeterli
     STATUS_UPDATE_INTERVAL: int = 30
     
     # --- 🔍 Debug ---
@@ -78,48 +67,42 @@ class SimpleEMACrossSettings:
     def validate_settings(cls):
         """Ayar doğrulama"""
         errors = []
-        warnings = []
         
         if not cls.API_KEY or not cls.API_SECRET:
             errors.append("❌ BINANCE_API_KEY veya BINANCE_API_SECRET eksik!")
         
-        if cls.TIMEFRAME not in cls.AVAILABLE_TIMEFRAMES:
-            warnings.append(f"⚠️ Geçersiz timeframe: {cls.TIMEFRAME}")
-            cls.TIMEFRAME = "15m"
+        if cls.POSITION_SIZE_USDT < 10:
+            errors.append("❌ Pozisyon boyutu minimum 10 USDT olmalı")
         
-        if cls.LEVERAGE > 20:
-            warnings.append(f"⚠️ Yüksek kaldıraç: {cls.LEVERAGE}x")
+        if cls.BB_PERIOD < 10:
+            errors.append("❌ Bollinger period minimum 10 olmalı")
         
         for error in errors:
             print(error)
-        for warning in warnings:
-            print(warning)
         
         return len(errors) == 0
     
     @classmethod
     def print_settings(cls):
         """Ayarları göster"""
-        tp_sl = cls.get_tp_sl()
-        
         print("=" * 70)
-        print("📈 SAF EMA CROSS BOT")
+        print("📊 BOLLİNGER BANDS AL-SAT STRATEJİSİ")
         print("=" * 70)
         print(f"🌐 Ortam: {cls.ENVIRONMENT}")
         print(f"🧪 Test Modu: {'AÇIK' if cls.TEST_MODE else 'KAPALI (CANLI)'}")
-        print(f"📈 EMA: {cls.EMA_FAST_PERIOD}/{cls.EMA_SLOW_PERIOD}")
-        print(f"⏰ Zaman Dilimi: {cls.TIMEFRAME}")
+        print(f"📊 Bollinger Period: {cls.BB_PERIOD}")
+        print(f"📈 Std Dev: {cls.BB_STD_DEV}")
+        print(f"⏰ Timeframe: {cls.TIMEFRAME} (SABİT)")
+        print(f"💰 Pozisyon Boyutu: {cls.POSITION_SIZE_USDT} USDT (SABİT)")
         print(f"💰 Kaldıraç: {cls.LEVERAGE}x")
-        print(f"💵 Pozisyon: %{cls.MAX_POSITION_SIZE_PERCENT*100:.0f} bakiye")
-        print(f"🎯 TP: %{tp_sl['tp_percent']*100:.1f} | SL: %{tp_sl['sl_percent']*100:.1f}")
-        print(f"📊 Max Coin: {cls.MAX_COINS}")
-        print(f"⚡ Rate Limit: {cls.MAX_REQUESTS_PER_SECOND} req/s")
+        print(f"🎯 TP Multiplier: {cls.TP_MULTIPLIER}")
+        print(f"🛑 SL Multiplier: {cls.SL_MULTIPLIER}")
         print("=" * 70)
-        print("✅ FİLTRE YOK - SAF EMA KESİŞİMİ")
+        print("✅ HER DAKİKA 1 LONG + 1 SHORT POZİSYON")
         print("=" * 70)
 
 # Global settings instance
-settings = SimpleEMACrossSettings()
+settings = BollingerBandsSettings()
 
 if __name__ == "__main__":
     if settings.validate_settings():
