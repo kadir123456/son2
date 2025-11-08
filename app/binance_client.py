@@ -456,3 +456,15 @@ class FixedBinanceClient:
                 print("✅ Binance AsyncClient bağlantısı kapatıldı.")
             except Exception as e:
                 print(f"⚠️ Bağlantı kapatılırken hata: {e}")
+
+
+# ÖNEMLİ: main.py'nin import edebilmesi için client instance'ı oluştur
+# Bu satır main.py'deki "from .binance_client import binance_client" import'unu çözer
+binance_client = None  # İlk başta None, settings yüklendikten sonra doldurulacak
+
+
+def create_binance_client(settings):
+    """Binance client instance'ı oluştur"""
+    global binance_client
+    binance_client = FixedBinanceClient(settings)
+    return binance_client
