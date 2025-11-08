@@ -36,7 +36,7 @@ class FastScalpingSettings:
     MIN_BALANCE_USDT: float = 10
     
     # --- 🎯 TP/SL Ayarları (Çok Sıkı) ---
-    TAKE_PROFIT_PERCENT: float = 0.004  # %0.4 kar al
+    TAKE_PROFIT_PERCENT: float = 0.002  # %0.4 kar al
     STOP_LOSS_PERCENT: float = 0.002    # %0.2 zarar durdur
     
     # --- 🚀 API Rate Limiting ---
