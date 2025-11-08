@@ -7,10 +7,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 import time
 
-from .fast_scalping_bot import fast_scalping_bot
 from .config import settings
 from .firebase_manager import firebase_manager
 from .binance_client import binance_client
+from .strategy import ScalpingStrategy
+from .fast_scalping_bot import create_bot
 
 bearer_scheme = HTTPBearer()
 
@@ -20,6 +21,10 @@ app = FastAPI(
     description="30 saniye ve 1 dakikalık agresif scalping - Sürekli trade"
 )
 
+# Bot instance'ını global olarak oluştur
+strategy = ScalpingStrategy(settings)
+fast_scalping_bot = create_bot(settings, binance_client, strategy, firebase_manager)
+
 
 # ===================== STARTUP =====================
 @app.on_event("startup")
@@ -28,10 +33,12 @@ async def startup_event():
     print("🚀 Hızlı Scalping Bot başlatılıyor...")
     print("=" * 70)
     print("⚡ STRATEJİ: Sürekli agresif scalping")
-    print("💰 POZİSYON: 10 USDT sabit")
-    print("📈 KALDIRAÇ: 15x")
+    print(f"💰 POZİSYON: %{settings.BALANCE_USAGE_PERCENT*100:.0f} bakiye")
+    print(f"📈 KALDIRAÇ: {settings.LEVERAGE}x")
     print("⏰ TIMEFRAME: 1 dakika")
-    print("🎯 TP: %0.4 | SL: %0.2")
+    print(f"🎯 TP: %{settings.TAKE_PROFIT_PERCENT*100:.2f} | SL: %{settings.STOP_LOSS_PERCENT*100:.2f}")
+    print(f"⏳ COOLDOWN: {settings.TRADE_COOLDOWN_SECONDS}s")
+    print(f"🔢 GÜNLÜK LİMİT: {settings.MAX_DAILY_TRADES} trade")
     print("=" * 70)
     
     if settings.validate_settings():
@@ -46,7 +53,7 @@ async def startup_event():
 async def shutdown_event():
     """Kapatma"""
     try:
-        if fast_scalping_bot.status["is_running"]:
+        if fast_scalping_bot and fast_scalping_bot.status["is_running"]:
             await fast_scalping_bot.stop()
         await binance_client.close()
         print("✅ Bot güvenli kapatıldı")
@@ -95,16 +102,18 @@ async def start_bot(
         
         return JSONResponse({
             "success": True,
-            "message": f"Hızlı Scalping Bot {symbol} için başlatılıyor...",
+            "message": f"Optimized Scalping Bot {symbol} için başlatılıyor...",
             "symbol": symbol,
             "user": user_email,
-            "strategy": "Fast Scalping - No Filters",
+            "strategy": "Optimized Scalping v2.0",
             "info": {
-                "position_size": "10 USDT",
-                "leverage": "15x",
+                "position_size": f"%{settings.BALANCE_USAGE_PERCENT*100:.0f} bakiye",
+                "leverage": f"{settings.LEVERAGE}x",
                 "timeframe": "1m",
-                "tp": "%0.4",
-                "sl": "%0.2"
+                "tp": f"%{settings.TAKE_PROFIT_PERCENT*100:.2f}",
+                "sl": f"%{settings.STOP_LOSS_PERCENT*100:.2f}",
+                "cooldown": f"{settings.TRADE_COOLDOWN_SECONDS}s",
+                "daily_limit": settings.MAX_DAILY_TRADES
             }
         })
         
@@ -157,16 +166,19 @@ async def health_check():
         return JSONResponse({
             "status": "healthy",
             "bot_running": status["is_running"],
-            "strategy": "Fast Scalping",
-            "version": "1.0.0",
+            "strategy": "Optimized Scalping v2.0",
+            "version": "2.0.0",
             "timestamp": time.time(),
             "config": {
                 "environment": settings.ENVIRONMENT,
                 "timeframe": "1m",
-                "position_size": "10 USDT",
-                "leverage": "15x",
-                "tp": "%0.4",
-                "sl": "%0.2"
+                "position_size": f"%{settings.BALANCE_USAGE_PERCENT*100:.0f} bakiye",
+                "leverage": f"{settings.LEVERAGE}x",
+                "tp": f"%{settings.TAKE_PROFIT_PERCENT*100:.2f}",
+                "sl": f"%{settings.STOP_LOSS_PERCENT*100:.2f}",
+                "cooldown": f"{settings.TRADE_COOLDOWN_SECONDS}s",
+                "daily_limit": settings.MAX_DAILY_TRADES,
+                "min_momentum": f"%{settings.MIN_MOMENTUM_PERCENT*100:.3f}"
             }
         })
     except Exception as e:
@@ -203,7 +215,8 @@ async def get_account_info(user: dict = Depends(authenticate)):
                 "size": abs(float(pos['positionAmt'])),
                 "entry_price": float(pos['entryPrice']),
                 "mark_price": float(pos['markPrice']),
-                "pnl": pnl
+                "pnl": pnl,
+                "leverage": int(pos['leverage'])
             })
         
         return JSONResponse({
@@ -242,5 +255,5 @@ async def exception_handler(request, exc):
     }, status_code=500)
 
 
-print("✅ Hızlı Scalping Bot API yüklendi!")
-print("⚡ Strateji: Sürekli agresif scalping - Filtre YOK!")
+print("✅ Optimized Scalping Bot API yüklendi!")
+print("⚡ Strateji: Dinamik pozisyon + Cooldown + Günlük limit!")
